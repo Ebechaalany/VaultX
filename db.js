@@ -1,6 +1,6 @@
 // db.js — thin promise wrapper around IndexedDB. Everything stays on-device.
 const DB_NAME = 'ledger-journal';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 let _db = null;
 
 function openDB(){
@@ -22,6 +22,12 @@ function openDB(){
       }
       if(!db.objectStoreNames.contains('rules')){
         db.createObjectStore('rules', { keyPath:'id' });
+      }
+      if(!db.objectStoreNames.contains('checklist')){
+        db.createObjectStore('checklist', { keyPath:'id' });
+      }
+      if(!db.objectStoreNames.contains('goals')){
+        db.createObjectStore('goals', { keyPath:'id' });
       }
       if(!db.objectStoreNames.contains('meta')){
         db.createObjectStore('meta', { keyPath:'key' });
@@ -170,13 +176,68 @@ const DB = {
     }
   },
 
+  checklist: {
+    async all(){
+      const store = await tx('checklist');
+      return new Promise((res, rej)=>{
+        const req = store.getAll();
+        req.onsuccess = ()=> res(req.result);
+        req.onerror = ()=> rej(req.error);
+      });
+    },
+    async put(item){
+      const store = await tx('checklist','readwrite');
+      return new Promise((res, rej)=>{
+        const req = store.put(item);
+        req.onsuccess = ()=> res(item);
+        req.onerror = ()=> rej(req.error);
+      });
+    },
+    async delete(id){
+      const store = await tx('checklist','readwrite');
+      return new Promise((res, rej)=>{
+        const req = store.delete(id);
+        req.onsuccess = ()=> res();
+        req.onerror = ()=> rej(req.error);
+      });
+    }
+  },
+
+  goals: {
+    async all(){
+      const store = await tx('goals');
+      return new Promise((res, rej)=>{
+        const req = store.getAll();
+        req.onsuccess = ()=> res(req.result);
+        req.onerror = ()=> rej(req.error);
+      });
+    },
+    async put(item){
+      const store = await tx('goals','readwrite');
+      return new Promise((res, rej)=>{
+        const req = store.put(item);
+        req.onsuccess = ()=> res(item);
+        req.onerror = ()=> rej(req.error);
+      });
+    },
+    async delete(id){
+      const store = await tx('goals','readwrite');
+      return new Promise((res, rej)=>{
+        const req = store.delete(id);
+        req.onsuccess = ()=> res();
+        req.onerror = ()=> rej(req.error);
+      });
+    }
+  },
+
   // Full local backup — since there's no server, this is the only way to move
   // data between devices or keep a safety copy.
   async exportAll(){
-    const [trades, accounts, setups, rules] = await Promise.all([
-      this.trades.all(), this.accounts.all(), this.setups.all(), this.rules.all()
+    const [trades, accounts, setups, rules, checklist, goals] = await Promise.all([
+      this.trades.all(), this.accounts.all(), this.setups.all(), this.rules.all(),
+      this.checklist.all(), this.goals.all()
     ]);
-    return { version:1, exportedAt:new Date().toISOString(), trades, accounts, setups, rules };
+    return { version:2, exportedAt:new Date().toISOString(), trades, accounts, setups, rules, checklist, goals };
   },
 
   async importAll(data){
@@ -185,5 +246,7 @@ const DB = {
     for(const a of (data.accounts||[])) await this.accounts.put(a);
     for(const s of (data.setups||[])) await this.setups.put(s);
     for(const r of (data.rules||[])) await this.rules.put(r);
+    for(const c of (data.checklist||[])) await this.checklist.put(c);
+    for(const g of (data.goals||[])) await this.goals.put(g);
   }
 };

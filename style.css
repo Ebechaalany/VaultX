@@ -213,6 +213,105 @@ input[type=file]{ padding:8px; }
 }
 #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
+/* ================= Grade boxes (A-F) ================= */
+.grade-row{ display:flex; flex-direction:column; gap:8px; }
+.grade-box{
+  display:flex; align-items:center; justify-content:space-between; width:100%;
+  padding:11px 16px; border-radius:10px; border:1.5px solid var(--line); background:var(--bg-2);
+  cursor:pointer; font-weight:700; color:var(--text1); transition:all .12s ease;
+}
+.grade-box .letter{ font-size:16px; font-family:'Space Grotesk',sans-serif; }
+.grade-box .desc{ font-size:12px; font-weight:500; color:var(--text2); }
+.grade-box.on{ color:#04120e; }
+.grade-box.on .desc{ color:rgba(4,18,14,.65); }
+
+/* ================= Small field variant (P&L box) ================= */
+.field-row-pnl{ display:grid; grid-template-columns:120px 1fr 1fr; gap:12px; }
+@media (max-width:880px){ .field-row-pnl{ grid-template-columns:1fr; } }
+
+/* ================= Trade cards (Trade History / Archive) ================= */
+.trade-card-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px; }
+.trade-card{
+  background:var(--bg-1); border:1px solid var(--line); border-radius:14px; overflow:hidden; cursor:pointer;
+  transition:border-color .12s ease, transform .08s ease;
+}
+.trade-card:hover{ border-color:var(--teal-dim); }
+.trade-card .thumb-wrap{ position:relative; height:130px; background:var(--bg-2); }
+.trade-card .thumb-wrap img{ width:100%; height:100%; object-fit:cover; display:block; }
+.trade-card .thumb-placeholder{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:var(--text2); }
+.trade-card .thumb-placeholder svg{ width:26px; height:26px; opacity:.5; }
+.badge-dir{ position:absolute; top:8px; left:8px; font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:6px; backdrop-filter:blur(4px); }
+.badge-dir.long{ background:rgba(52,214,122,.85); color:#04120e; }
+.badge-dir.short{ background:rgba(242,85,90,.85); color:#1a0505; }
+.badge-grade{ position:absolute; top:8px; right:8px; font-size:11px; font-weight:800; width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk',sans-serif; }
+.trade-card .body{ padding:12px 14px; }
+.trade-card .sym-row{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; }
+.trade-card .sym{ font-weight:700; font-size:14.5px; }
+.trade-card .date{ font-size:11px; color:var(--text2); }
+.trade-card .prices{ font-size:11.5px; color:var(--text1); margin-bottom:8px; }
+.trade-card .foot{ display:flex; justify-content:space-between; align-items:center; }
+.trade-card .qty{ font-size:11px; color:var(--text2); }
+.trade-card .pnl-tag{ font-weight:700; font-size:14px; }
+
+/* ================= Archive (folder browser) ================= */
+.folder-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:14px; }
+.folder-card{
+  background:var(--bg-1); border:1px solid var(--line); border-radius:14px; padding:20px 16px; cursor:pointer;
+  transition:border-color .12s ease;
+}
+.folder-card:hover{ border-color:var(--teal-dim); }
+.folder-card svg{ width:26px; height:26px; color:var(--teal); margin-bottom:12px; }
+.folder-card .f-title{ font-weight:700; font-size:16px; margin-bottom:4px; }
+.folder-card .f-meta{ font-size:12px; color:var(--text1); }
+.breadcrumb{ display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text1); margin-bottom:16px; }
+.breadcrumb span{ cursor:pointer; }
+.breadcrumb span:hover{ color:var(--teal); }
+.breadcrumb .sep{ color:var(--text2); cursor:default; }
+.breadcrumb .current{ color:var(--text0); font-weight:700; cursor:default; }
+
+/* ================= Checklist / goals ================= */
+.checklist{ display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
+.checklist-item{ display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid var(--line); }
+.checklist-item:last-child{ border-bottom:none; }
+.checklist-item input[type=checkbox]{ width:18px; height:18px; accent-color:var(--teal); flex:none; }
+.checklist-item span{ flex:1; font-size:13.5px; }
+.checklist-item.done span{ color:var(--text2); text-decoration:line-through; }
+.checklist-item .del{ background:none; border:none; color:var(--text2); cursor:pointer; font-size:16px; padding:2px 6px; }
+.checklist-item .del:hover{ color:var(--red); }
+.checklist-add{ display:flex; gap:8px; }
+
+/* ================= Streaks / XP ================= */
+.xp-card{ display:flex; align-items:center; gap:20px; }
+.xp-level-badge{
+  width:64px; height:64px; border-radius:16px; background:linear-gradient(160deg,var(--teal),var(--teal-dim));
+  display:flex; flex-direction:column; align-items:center; justify-content:center; color:#04231f; font-family:'Space Grotesk',sans-serif; flex:none;
+}
+.xp-level-badge .lvl-num{ font-size:22px; font-weight:800; line-height:1; }
+.xp-level-badge .lvl-lbl{ font-size:9px; text-transform:uppercase; letter-spacing:.05em; }
+.xp-bar-track{ flex:1; }
+.xp-bar-bg{ height:10px; background:var(--bg-2); border-radius:99px; overflow:hidden; border:1px solid var(--line); }
+.xp-bar-fill{ height:100%; background:linear-gradient(90deg,var(--teal),var(--gold)); border-radius:99px; }
+.xp-bar-label{ display:flex; justify-content:space-between; font-size:11.5px; color:var(--text1); margin-top:6px; }
+
+.streak-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+.streak-stat .num{ font-size:26px; font-weight:800; font-family:'Space Grotesk',sans-serif; }
+.streak-stat .best{ font-size:11px; color:var(--text2); margin-top:2px; }
+
+.badge-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; }
+.achievement{ padding:14px; border-radius:12px; border:1px solid var(--line); background:var(--bg-2); text-align:center; }
+.achievement.locked{ opacity:.4; filter:grayscale(1); }
+.achievement .emoji{ font-size:26px; margin-bottom:8px; }
+.achievement .a-title{ font-weight:700; font-size:13px; margin-bottom:2px; }
+.achievement .a-desc{ font-size:11px; color:var(--text1); }
+
+/* ================= Dashboard checklist card ================= */
+.checklist-card-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+
+@media (max-width:880px){
+  .streak-grid{ grid-template-columns:1fr 1fr; }
+  .xp-card{ flex-direction:column; align-items:flex-start; gap:14px; }
+}
+
 /* ================= Responsive ================= */
 @media (max-width: 880px){
   .sidebar{ display:none; }

@@ -34,11 +34,16 @@ Go to **Settings → Local Backup → Export backup** regularly, and keep the
 file somewhere safe (e.g. your own cloud drive). If you switch devices or
 clear your browser data, use **Import backup** to restore.
 
-## What's in v1
+## What's in v2
 
-Dashboard, trade log with search/filters, trade entry (with chart
-screenshot, setup tag, 1–5 star grade, notes), P&L calendar, analytics
-(equity curve, avg win/loss, drawdown, day-of-week & setup/instrument
-breakdowns), and settings for accounts/setups/rules.
+Dashboard (with pre-trade checklist), Trade History (card grid with thumbnails),
+Archive (browse trades by year → month, folder-style), trade entry (session,
+A–F letter grade, emotions before/during, notes, mistakes, lessons, chart
+screenshot), P&L calendar, analytics (equity curve, avg win/loss, drawdown,
+day-of-week & setup/instrument breakdowns), Streaks (XP/levels, win/loss/
+profit-day streaks, goals checklist, achievements), and settings for
+accounts/setups/rules/backups.
 
-
+Not yet built: AI coach chat (needs a live LLM API call, which isn't possible
+in a fully local/no-server app without you supplying an API key that would be
+visible in the browser — worth a conversation if you want it added).

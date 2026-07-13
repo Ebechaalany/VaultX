@@ -3,14 +3,31 @@
 const ICONS = {
   dashboard:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
   trades:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5m0 14 4-4m-4 4-4-4M20 5v14m0-14-4 4m4-4 4 4"/></svg>',
+  archive:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l1.5-3h15L21 7"/><rect x="3" y="7" width="18" height="13" rx="1.5"/><path d="M9.5 12h5"/></svg>',
   calendar:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
   analytics:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10m6 10V4m6 16v-7"/></svg>',
+  streaks:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2c1 4-3 5-3 8.5A3.5 3.5 0 0 0 12 14a3.5 3.5 0 0 0 3-1.7c.3 2-1 3.5-1 3.5 3-1 5-3.8 5-6.8 0-4-3-6-3-8 0 2-1 3-2 3 0-2-1-4-2-4Z"/><path d="M9 18a3 3 0 0 0 6 0"/></svg>',
   settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
-  empty:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19V5m0 14 4-4m-4 4-4-4M20 5v14m0-14-4 4m4-4 4 4"/></svg>'
+  empty:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19V5m0 14 4-4m-4 4-4-4M20 5v14m0-14-4 4m4-4 4 4"/></svg>',
+  folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4l2 2.5h9A1.5 1.5 0 0 1 21 9v9.5A1.5 1.5 0 0 1 19.5 20h-15A1.5 1.5 0 0 1 3 18.5Z"/></svg>',
+  image:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-5-5-9 9"/></svg>'
 };
 
-const state = { trades:[], accounts:[], setups:[], rules:[], activeAccount:'all', route:'dashboard' };
+const GRADES = [
+  { id:'A', label:'A', desc:'Flawless execution', color:'#34d67a' },
+  { id:'B', label:'B', desc:'Good, minor slippage', color:'#9fd634' },
+  { id:'C', label:'C', desc:'Average, some plan drift', color:'#f4c430' },
+  { id:'D', label:'D', desc:'Poor discipline', color:'#f2914a' },
+  { id:'F', label:'F', desc:'Broke the rules', color:'#f2555a' }
+];
+const SESSIONS = ['NY AM','NY PM','Asia','London'];
+
+const state = {
+  trades:[], accounts:[], setups:[], rules:[], checklist:[], goals:[],
+  activeAccount:'all', route:'dashboard',
+  archive: { year:null, month:null }
+};
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => Array.from(document.querySelectorAll(sel));
@@ -91,11 +108,63 @@ function groupBy(trades, keyFn){
   return Object.values(map).sort((a,b)=> b.pnl - a.pnl);
 }
 
+function gradeInfo(id){ return GRADES.find(g=> g.id === id); }
+
+function computeStreaks(trades){
+  const closed = trades.filter(t=> t.pnl !== undefined);
+  const chrono = [...closed].sort((a,b)=> a.date.localeCompare(b.date) || a.createdAt - b.createdAt);
+
+  // win / loss streaks (trade by trade)
+  let winBest=0, lossBest=0, winCur=0, lossCur=0;
+  chrono.forEach(t=>{
+    if(t.pnl > 0){ winCur += 1; lossCur = 0; winBest = Math.max(winBest, winCur); }
+    else if(t.pnl < 0){ lossCur += 1; winCur = 0; lossBest = Math.max(lossBest, lossCur); }
+    else { winCur = 0; lossCur = 0; }
+  });
+
+  // profit-day streak (by distinct trading day, in chronological order of days that have trades)
+  const byDay = {};
+  chrono.forEach(t=>{ byDay[t.date] = (byDay[t.date]||0) + t.pnl; });
+  const days = Object.keys(byDay).sort();
+  let dayBest=0, dayCur=0;
+  days.forEach(d=>{
+    if(byDay[d] > 0){ dayCur += 1; dayBest = Math.max(dayBest, dayCur); }
+    else { dayCur = 0; }
+  });
+
+  return {
+    winStreakCurrent: winCur, winStreakBest: winBest,
+    lossStreakCurrent: lossCur, lossStreakBest: lossBest,
+    profitDayStreakCurrent: dayCur, profitDayStreakBest: dayBest,
+    journalDays: days.length
+  };
+}
+
+function computeXP(trades){
+  const withNotes = trades.filter(t=> t.notes && t.notes.trim()).length;
+  const withShot = trades.filter(t=> t.screenshot).length;
+  const withReflection = trades.filter(t=> (t.mistakes&&t.mistakes.trim()) || (t.lessons&&t.lessons.trim())).length;
+  const xp = trades.length*20 + withNotes*5 + withShot*5 + withReflection*5;
+  const perLevel = 150;
+  const level = Math.floor(xp / perLevel) + 1;
+  const xpIntoLevel = xp % perLevel;
+  return { xp, level, xpIntoLevel, xpForNext: perLevel };
+}
+
+const ACHIEVEMENTS = [
+  { id:'first', title:'First Entry', desc:'Log your first trade', emoji:'📝', check:(trades)=> trades.length >= 1 },
+  { id:'onfire', title:'On Fire', desc:'3 winning trades in a row', emoji:'🔥', check:(trades,streaks)=> streaks.winStreakBest >= 3 },
+  { id:'disciplined', title:'Disciplined', desc:'3 profitable days in a row', emoji:'💎', check:(trades,streaks)=> streaks.profitDayStreakBest >= 3 },
+  { id:'consistent', title:'Consistent', desc:'Journal 5 different days', emoji:'📅', check:(trades,streaks)=> streaks.journalDays >= 5 },
+  { id:'century', title:'Century', desc:'Log 100 trades', emoji:'🏆', check:(trades)=> trades.length >= 100 },
+  { id:'aplus', title:'A+ Trader', desc:'Grade a trade A', emoji:'⭐', check:(trades)=> trades.some(t=> t.grade === 'A') }
+];
+
 // ============== Rendering shell ==============
 function renderShell(){
   const links = [
-    ['dashboard','Dashboard'], ['trades','Trade Log'], ['calendar','Calendar'],
-    ['analytics','Analytics'], ['settings','Settings']
+    ['dashboard','Dashboard'], ['trades','Trade History'], ['archive','Archive'], ['calendar','Calendar'],
+    ['analytics','Analytics'], ['streaks','Streaks'], ['settings','Settings']
   ];
   $('#sidebar-nav').innerHTML = links.map(([id,label])=>
     `<a class="nav-link ${state.route===id?'active':''}" data-route="${id}">${ICONS[id]}<span>${label}</span></a>`
@@ -114,19 +183,22 @@ function navigate(route){
 }
 
 async function refreshData(){
-  const [trades, accounts, setups, rules] = await Promise.all([
-    DB.trades.all(), DB.accounts.all(), DB.setups.all(), DB.rules.all()
+  const [trades, accounts, setups, rules, checklist, goals] = await Promise.all([
+    DB.trades.all(), DB.accounts.all(), DB.setups.all(), DB.rules.all(), DB.checklist.all(), DB.goals.all()
   ]);
   trades.forEach(t=>{ if(t.exitPrice !== null && t.exitPrice !== undefined && t.exitPrice !== ''){ t.pnl = computeTradePnl(t); } });
   state.trades = trades; state.accounts = accounts; state.setups = setups; state.rules = rules;
+  state.checklist = checklist; state.goals = goals;
 }
 
 function renderView(){
   const view = $('#view');
   if(state.route === 'dashboard') return renderDashboard(view);
-  if(state.route === 'trades') return renderTradeLog(view);
+  if(state.route === 'trades') return renderTradeHistory(view);
+  if(state.route === 'archive') return renderArchive(view);
   if(state.route === 'calendar') return renderCalendar(view);
   if(state.route === 'analytics') return renderAnalytics(view);
+  if(state.route === 'streaks') return renderStreaks(view);
   if(state.route === 'settings') return renderSettings(view);
 }
 
@@ -156,6 +228,17 @@ function renderDashboard(view){
         <div id="recent-trades"></div>
       </div>
     </div>
+    <div class="card" style="margin-top:16px;">
+      <div class="checklist-card-head">
+        <div class="section-title" style="margin:0;">Pre-Trade Checklist</div>
+        <button class="btn btn-sm btn-ghost" id="checklist-reset">Reset all</button>
+      </div>
+      <div class="checklist" id="dash-checklist"></div>
+      <div class="checklist-add">
+        <input id="checklist-text" placeholder="Add a checklist item, e.g. Checked higher timeframe bias">
+        <button class="btn btn-sm" id="checklist-add-btn">${ICONS.plus}</button>
+      </div>
+    </div>
   `;
   requestAnimationFrame(()=> drawEquityCurve($('#equity-canvas'), s.equity));
   const recent = trades.slice(0,5);
@@ -163,10 +246,41 @@ function renderDashboard(view){
     `<div class="empty-state" style="padding:30px 10px;">${ICONS.empty}<div>No trades yet</div></div>`;
   $$('#recent-trades .trade-row').forEach(el=> el.addEventListener('click', ()=> openTradeModal(el.dataset.id)));
   $('#btn-new-trade').addEventListener('click', ()=> openTradeModal());
+
+  renderDashChecklist();
+  $('#checklist-add-btn').addEventListener('click', async ()=>{
+    const text = $('#checklist-text').value.trim();
+    if(!text) return;
+    await DB.checklist.put({ id: DB.uid(), text, checked:false });
+    await refreshData(); renderDashChecklist(); $('#checklist-text').value='';
+  });
+  $('#checklist-reset').addEventListener('click', async ()=>{
+    for(const item of state.checklist){ item.checked = false; await DB.checklist.put(item); }
+    await refreshData(); renderDashChecklist(); toast('Checklist reset');
+  });
+}
+
+function renderDashChecklist(){
+  const el = $('#dash-checklist');
+  if(!el) return;
+  el.innerHTML = state.checklist.length ? state.checklist.map(c=> `
+    <div class="checklist-item ${c.checked?'done':''}">
+      <input type="checkbox" data-cl-toggle="${c.id}" ${c.checked?'checked':''}>
+      <span>${escapeHtml(c.text)}</span>
+      <button class="del" data-cl-del="${c.id}">×</button>
+    </div>`).join('') : `<div style="color:var(--text1);font-size:13px;padding:6px 0;">No checklist items yet — add your pre-trade routine below.</div>`;
+  $$('[data-cl-toggle]', el).forEach(cb=> cb.addEventListener('change', async ()=>{
+    const item = state.checklist.find(x=> x.id === cb.dataset.clToggle);
+    item.checked = cb.checked;
+    await DB.checklist.put(item); await refreshData(); renderDashChecklist();
+  }));
+  $$('[data-cl-del]', el).forEach(b=> b.addEventListener('click', async ()=>{
+    await DB.checklist.delete(b.dataset.clDel); await refreshData(); renderDashChecklist();
+  }));
 }
 
 function tradeRowHtml(t){
-  const stars = '★'.repeat(t.grade||0) + '☆'.repeat(5-(t.grade||0));
+  const g = gradeInfo(t.grade);
   const hasPnl = t.pnl !== undefined;
   return `<div class="trade-row" data-id="${t.id}">
     <div class="dir ${t.direction}">${t.direction === 'short' ? 'SHORT' : 'LONG'}</div>
@@ -174,10 +288,30 @@ function tradeRowHtml(t){
       <div class="sym">${escapeHtml(t.symbol)}</div>
       <div class="meta">${t.date}${t.setup?' · '+escapeHtml(t.setup):''}</div>
     </div>
-    <div class="meta mono">${t.qty} qty</div>
+    <div class="meta mono">${t.qty} size</div>
     <div class="meta mono">${t.entryPrice} → ${t.exitPrice ?? '—'}</div>
-    <div class="pnl mono ${hasPnl ? (t.pnl>=0?'pos':'neg') : ''}" style="${hasPnl ? (t.pnl>=0?'color:var(--green)':'color:var(--red)') : 'color:var(--text2)'}">${hasPnl ? fmtMoneyShort(t.pnl) : 'open'}</div>
-    <div class="stars">${stars}</div>
+    <div class="pnl mono" style="${hasPnl ? (t.pnl>=0?'color:var(--green)':'color:var(--red)') : 'color:var(--text2)'}">${hasPnl ? fmtMoneyShort(t.pnl) : 'open'}</div>
+    <div class="stars" style="color:${g?g.color:'var(--text2)'};font-weight:800;">${g?g.label:'—'}</div>
+  </div>`;
+}
+
+function tradeCardHtml(t){
+  const g = gradeInfo(t.grade);
+  const hasPnl = t.pnl !== undefined;
+  return `<div class="trade-card" data-id="${t.id}">
+    <div class="thumb-wrap">
+      ${t.screenshot ? `<img src="${t.screenshot}" alt="">` : `<div class="thumb-placeholder">${ICONS.image}</div>`}
+      <div class="badge-dir ${t.direction}">${t.direction === 'short' ? 'SHORT' : 'LONG'}</div>
+      ${g ? `<div class="badge-grade" style="background:${g.color};color:#04120e;">${g.label}</div>` : ''}
+    </div>
+    <div class="body">
+      <div class="sym-row"><span class="sym">${escapeHtml(t.symbol)}</span><span class="date">${t.date}</span></div>
+      <div class="prices mono">${t.entryPrice} → ${t.exitPrice ?? '—'}</div>
+      <div class="foot">
+        <span class="qty mono">${t.qty} size</span>
+        <span class="pnl-tag mono" style="${hasPnl ? (t.pnl>=0?'color:var(--green)':'color:var(--red)') : 'color:var(--text2)'}">${hasPnl ? fmtMoneyShort(t.pnl) : 'open'}</span>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -185,7 +319,7 @@ function escapeHtml(str){
   return String(str ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// ============== Trade Log ==============
+// ============== Trade History ==============
 let logFilter = { q:'', setup:'', dir:'' };
 function getFilteredLogTrades(){
   return filteredTrades().filter(t=>{
@@ -198,18 +332,18 @@ function getFilteredLogTrades(){
     return true;
   });
 }
-function renderTradeLogList(){
+function renderTradeHistoryList(){
   const trades = getFilteredLogTrades();
   const list = $('#trade-list');
   if(!list) return;
-  list.innerHTML = trades.length ? trades.map(tradeRowHtml).join('') :
+  list.innerHTML = trades.length ? `<div class="trade-card-grid">${trades.map(tradeCardHtml).join('')}</div>` :
     `<div class="empty-state">${ICONS.empty}<div>No trades match your filters</div></div>`;
-  $$('#trade-list .trade-row').forEach(el=> el.addEventListener('click', ()=> openTradeModal(el.dataset.id)));
+  $$('#trade-list .trade-card').forEach(el=> el.addEventListener('click', ()=> openTradeModal(el.dataset.id)));
 }
-function renderTradeLog(view){
+function renderTradeHistory(view){
   view.innerHTML = `
     <div class="topbar">
-      <div><h1>Trade Log</h1><div class="sub">Every trade, searchable</div></div>
+      <div><h1>Trade History</h1><div class="sub">Every trade, at a glance</div></div>
       <button class="btn btn-primary" id="btn-new-trade">${ICONS.plus}New Trade</button>
     </div>
     <div class="card" style="margin-bottom:16px;">
@@ -223,13 +357,71 @@ function renderTradeLog(view){
         </div>
       </div>
     </div>
-    <div class="card" id="trade-list"></div>
+    <div id="trade-list"></div>
   `;
-  renderTradeLogList();
+  renderTradeHistoryList();
   $('#btn-new-trade').addEventListener('click', ()=> openTradeModal());
-  $('#f-q').addEventListener('input', e=>{ logFilter.q = e.target.value; renderTradeLogList(); });
-  $('#f-dir').addEventListener('change', e=>{ logFilter.dir = e.target.value; renderTradeLogList(); });
-  $('#f-setup').addEventListener('change', e=>{ logFilter.setup = e.target.value; renderTradeLogList(); });
+  $('#f-q').addEventListener('input', e=>{ logFilter.q = e.target.value; renderTradeHistoryList(); });
+  $('#f-dir').addEventListener('change', e=>{ logFilter.dir = e.target.value; renderTradeHistoryList(); });
+  $('#f-setup').addEventListener('change', e=>{ logFilter.setup = e.target.value; renderTradeHistoryList(); });
+}
+
+// ============== Archive (folder browser: year → month → trades) ==============
+function renderArchive(view){
+  const trades = filteredTrades().filter(t=> t.pnl !== undefined);
+  const { year, month } = state.archive;
+
+  const crumbs = [`<span data-crumb="root" class="${!year?'current':''}">Archive</span>`];
+  if(year){ crumbs.push(`<span class="sep">/</span><span data-crumb="year" class="${!month&&month!==0?'current':''}">${year}</span>`); }
+  if(month !== null && month !== undefined && year){
+    crumbs.push(`<span class="sep">/</span><span class="current">${new Date(year, month, 1).toLocaleDateString(undefined,{month:'long'})}</span>`);
+  }
+
+  let body = '';
+  if(!year){
+    // level 0: years
+    const byYear = {};
+    trades.forEach(t=>{ const y = t.date.slice(0,4); byYear[y] = byYear[y] || { count:0, pnl:0 }; byYear[y].count++; byYear[y].pnl += t.pnl; });
+    const years = Object.keys(byYear).sort((a,b)=> b-a);
+    body = years.length ? `<div class="folder-grid">${years.map(y=> `
+      <div class="folder-card" data-year="${y}">
+        ${ICONS.folder}
+        <div class="f-title">${y}</div>
+        <div class="f-meta">${byYear[y].count} trade${byYear[y].count===1?'':'s'} · <span style="color:${byYear[y].pnl>=0?'var(--green)':'var(--red)'}">${fmtMoneyShort(byYear[y].pnl)}</span></div>
+      </div>`).join('')}</div>` : `<div class="empty-state">${ICONS.empty}<div>No journaled trades yet</div></div>`;
+  } else if(month === null || month === undefined){
+    // level 1: months within year
+    const byMonth = {};
+    trades.filter(t=> t.date.slice(0,4) === String(year)).forEach(t=>{
+      const m = +t.date.slice(5,7) - 1;
+      byMonth[m] = byMonth[m] || { count:0, pnl:0 };
+      byMonth[m].count++; byMonth[m].pnl += t.pnl;
+    });
+    const months = Object.keys(byMonth).map(Number).sort((a,b)=> b-a);
+    body = months.length ? `<div class="folder-grid">${months.map(m=> `
+      <div class="folder-card" data-month="${m}">
+        ${ICONS.folder}
+        <div class="f-title">${new Date(year, m, 1).toLocaleDateString(undefined,{month:'long'})}</div>
+        <div class="f-meta">${byMonth[m].count} trade${byMonth[m].count===1?'':'s'} · <span style="color:${byMonth[m].pnl>=0?'var(--green)':'var(--red)'}">${fmtMoneyShort(byMonth[m].pnl)}</span></div>
+      </div>`).join('')}</div>` : `<div class="empty-state">${ICONS.empty}<div>No trades in ${year}</div></div>`;
+  } else {
+    // level 2: trades in that month
+    const monthTrades = trades.filter(t=> t.date.slice(0,4) === String(year) && (+t.date.slice(5,7)-1) === month);
+    body = monthTrades.length ? `<div class="trade-card-grid">${monthTrades.map(tradeCardHtml).join('')}</div>` :
+      `<div class="empty-state">${ICONS.empty}<div>No trades that month</div></div>`;
+  }
+
+  view.innerHTML = `
+    <div class="topbar"><div><h1>Archive</h1><div class="sub">Organized by year and month</div></div></div>
+    <div class="breadcrumb">${crumbs.join('')}</div>
+    <div id="archive-body">${body}</div>
+  `;
+
+  $$('[data-crumb="root"]', view).forEach(el=> el.addEventListener('click', ()=>{ state.archive = { year:null, month:null }; renderArchive(view); }));
+  $$('[data-crumb="year"]', view).forEach(el=> el.addEventListener('click', ()=>{ state.archive.month = null; renderArchive(view); }));
+  $$('[data-year]', view).forEach(el=> el.addEventListener('click', ()=>{ state.archive.year = el.dataset.year; renderArchive(view); }));
+  $$('[data-month]', view).forEach(el=> el.addEventListener('click', ()=>{ state.archive.month = +el.dataset.month; renderArchive(view); }));
+  $$('.trade-card', view).forEach(el=> el.addEventListener('click', ()=> openTradeModal(el.dataset.id)));
 }
 
 // ============== Calendar ==============
@@ -335,7 +527,81 @@ function breakdownListHtml(items){
     </div>`).join('');
 }
 
-// ============== Settings ==============
+// ============== Streaks ==============
+function renderStreaks(view){
+  const trades = filteredTrades();
+  const closed = trades.filter(t=> t.pnl !== undefined);
+  const streaks = computeStreaks(trades);
+  const xpInfo = computeXP(closed);
+
+  view.innerHTML = `
+    <div class="topbar"><div><h1>Streaks</h1><div class="sub">Build discipline, not just profit</div></div></div>
+
+    <div class="card xp-card" style="margin-bottom:16px;">
+      <div class="xp-level-badge"><div class="lvl-num">${xpInfo.level}</div><div class="lvl-lbl">Level</div></div>
+      <div class="xp-bar-track">
+        <div class="xp-bar-bg"><div class="xp-bar-fill" style="width:${(xpInfo.xpIntoLevel/xpInfo.xpForNext*100).toFixed(0)}%"></div></div>
+        <div class="xp-bar-label"><span>${xpInfo.xpIntoLevel} XP</span><span>${xpInfo.xpForNext - xpInfo.xpIntoLevel} XP to level ${xpInfo.level+1}</span></div>
+      </div>
+    </div>
+
+    <div class="streak-grid" style="margin-bottom:16px;">
+      <div class="card streak-stat"><div class="label">Win Streak</div><div class="num" style="color:var(--green);">${streaks.winStreakCurrent}</div><div class="best">Best: ${streaks.winStreakBest}</div></div>
+      <div class="card streak-stat"><div class="label">Loss Streak</div><div class="num" style="color:var(--red);">${streaks.lossStreakCurrent}</div><div class="best">Worst: ${streaks.lossStreakBest}</div></div>
+      <div class="card streak-stat"><div class="label">Profit Day Streak</div><div class="num" style="color:var(--gold);">${streaks.profitDayStreakCurrent}</div><div class="best">Best: ${streaks.profitDayStreakBest}</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="checklist-card-head"><div class="section-title" style="margin:0;">Your Goals</div></div>
+      <div class="checklist" id="goals-list"></div>
+      <div class="checklist-add">
+        <input id="goal-text" placeholder="Add a goal, e.g. Journal every trade this week">
+        <button class="btn btn-sm" id="goal-add">${ICONS.plus}</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Achievements</div>
+      <div class="badge-grid">
+        ${ACHIEVEMENTS.map(a=>{
+          const unlocked = a.check(closed, streaks);
+          return `<div class="achievement ${unlocked?'':'locked'}">
+            <div class="emoji">${a.emoji}</div>
+            <div class="a-title">${a.title}</div>
+            <div class="a-desc">${a.desc}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  renderGoalsList();
+  $('#goal-add').addEventListener('click', async ()=>{
+    const text = $('#goal-text').value.trim();
+    if(!text) return;
+    await DB.goals.put({ id: DB.uid(), text, done:false });
+    await refreshData(); renderGoalsList(); $('#goal-text').value='';
+  });
+}
+
+function renderGoalsList(){
+  const el = $('#goals-list');
+  if(!el) return;
+  el.innerHTML = state.goals.length ? state.goals.map(g=> `
+    <div class="checklist-item ${g.done?'done':''}">
+      <input type="checkbox" data-goal-toggle="${g.id}" ${g.done?'checked':''}>
+      <span>${escapeHtml(g.text)}</span>
+      <button class="del" data-goal-del="${g.id}">×</button>
+    </div>`).join('') : `<div style="color:var(--text1);font-size:13px;padding:6px 0;">No goals yet — add one below.</div>`;
+  $$('[data-goal-toggle]', el).forEach(cb=> cb.addEventListener('change', async ()=>{
+    const g = state.goals.find(x=> x.id === cb.dataset.goalToggle);
+    g.done = cb.checked;
+    await DB.goals.put(g); await refreshData(); renderGoalsList();
+  }));
+  $$('[data-goal-del]', el).forEach(b=> b.addEventListener('click', async ()=>{
+    await DB.goals.delete(b.dataset.goalDel); await refreshData(); renderGoalsList();
+  }));
+}
 function renderSettings(view){
   view.innerHTML = `
     <div class="topbar"><div><h1>Settings</h1><div class="sub">Accounts, setups, rules &amp; backups</div></div></div>
@@ -465,25 +731,37 @@ function openTradeModal(id){
       </div>
       <div class="field-row3">
         <div class="field"><label>Entry price</label><input id="t-entry" type="number" step="any" value="${editing?editing.entryPrice:''}"></div>
-        <div class="field"><label>Exit price</label><input id="t-exit" type="number" step="any" placeholder="leave blank if open" value="${editing&&editing.exitPrice!=null?editing.exitPrice:''}"></div>
-        <div class="field"><label>Quantity</label><input id="t-qty" type="number" step="any" value="${editing?editing.qty:'1'}"></div>
+        <div class="field"><label>Exit price</label><input id="t-exit" type="number" step="any" value="${editing&&editing.exitPrice!=null?editing.exitPrice:''}"></div>
+        <div class="field"><label>Size</label><input id="t-qty" type="number" step="any" value="${editing?editing.qty:'1'}"></div>
       </div>
-      <div class="field-row">
-        <div class="field"><label>Fees</label><input id="t-fees" type="number" step="any" value="${editing?(editing.fees||0):'0'}"></div>
+      <div class="field-row-pnl">
+        <div class="field"><label>P&amp;L($)</label><input id="t-fees" type="number" step="any" value="${editing?(editing.fees||0):'0'}"></div>
         <div class="field"><label>Account</label>
           <select id="t-account">${state.accounts.map(a=>`<option value="${a.id}" ${editing&&editing.accountId===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Session</label>
+          <select id="t-session"><option value="">Select session</option>${SESSIONS.map(s=>`<option value="${s}" ${editing&&editing.session===s?'selected':''}>${s}</option>`).join('')}</select>
         </div>
       </div>
       <div class="field"><label>Setup</label>
         <div class="tag-list" id="t-setup-tags">${state.setups.map(s=>`<div class="tag ${editing&&editing.setup===s.name?'on':''}" data-setup="${escapeHtml(s.name)}">${escapeHtml(s.name)}</div>`).join('') || '<span style="color:var(--text1);font-size:12px;">Add setups in Settings</span>'}</div>
       </div>
-      <div class="field"><label>Grade</label><div class="star-input" id="t-grade">${[1,2,3,4,5].map(n=>`<span data-star="${n}" class="${editing&&editing.grade>=n?'on':''}">★</span>`).join('')}</div></div>
+      <div class="field"><label>Grade</label>
+        <div class="grade-row" id="t-grade">${GRADES.map(g=> `
+          <div class="grade-box" data-grade="${g.id}">
+            <span class="letter">${g.label}</span><span class="desc">${g.desc}</span>
+          </div>`).join('')}</div>
+      </div>
+      <div class="field"><label>Emotions Before</label><textarea id="t-emo-before" placeholder="How did you feel going into this trade?">${editing?escapeHtml(editing.emotionsBefore||''):''}</textarea></div>
+      <div class="field"><label>Emotions During</label><textarea id="t-emo-during" placeholder="How did you feel while it played out?">${editing?escapeHtml(editing.emotionsDuring||''):''}</textarea></div>
+      <div class="field"><label>Notes</label><textarea id="t-notes" placeholder="Setup reasoning, execution…">${editing?escapeHtml(editing.notes||''):''}</textarea></div>
+      <div class="field"><label>Mistakes</label><textarea id="t-mistakes" placeholder="What went wrong?">${editing?escapeHtml(editing.mistakes||''):''}</textarea></div>
+      <div class="field"><label>Lessons</label><textarea id="t-lessons" placeholder="What will you do differently?">${editing?escapeHtml(editing.lessons||''):''}</textarea></div>
       <div class="field"><label>Chart screenshot</label>
         <div class="img-drop" id="t-img-drop">Click to attach a screenshot</div>
         <input type="file" id="t-img-input" accept="image/*" style="display:none;">
         <img id="t-img-preview" class="img-preview" style="display:${editing&&editing.screenshot?'block':'none'};" src="${editing&&editing.screenshot?editing.screenshot:''}">
       </div>
-      <div class="field"><label>Notes</label><textarea id="t-notes" placeholder="Setup reasoning, execution, emotions…">${editing?escapeHtml(editing.notes||''):''}</textarea></div>
       <div style="display:flex;justify-content:space-between;margin-top:6px;">
         <div>${editing? `<button class="btn btn-danger" id="t-delete">Delete</button>` : ''}</div>
         <div style="display:flex;gap:10px;"><button class="btn btn-ghost" id="t-cancel">Cancel</button><button class="btn btn-primary" id="t-save">Save Trade</button></div>
@@ -494,20 +772,28 @@ function openTradeModal(id){
 
   let selectedDir = editing? editing.direction : 'long';
   let selectedSetup = editing? editing.setup : '';
-  let selectedGrade = editing? (editing.grade||0) : 0;
+  let selectedGrade = editing? (editing.grade||'') : '';
   let screenshotData = editing? (editing.screenshot||null) : null;
 
   function syncDir(){ $$('.pill-choice',backdrop).forEach(el=> el.classList.toggle('on', el.dataset.dir===selectedDir)); }
-  function syncStars(){ $$('#t-grade span',backdrop).forEach(el=> el.classList.toggle('on', +el.dataset.star <= selectedGrade)); }
-  syncDir(); syncStars();
+  function syncGrade(){
+    $$('.grade-box', backdrop).forEach(el=>{
+      const g = gradeInfo(el.dataset.grade);
+      const on = el.dataset.grade === selectedGrade;
+      el.classList.toggle('on', on);
+      el.style.background = on ? g.color : '';
+      el.style.borderColor = on ? g.color : '';
+    });
+  }
+  syncDir(); syncGrade();
 
   $$('.pill-choice', backdrop).forEach(el=> el.addEventListener('click', ()=>{ selectedDir = el.dataset.dir; syncDir(); }));
   $$('#t-setup-tags .tag', backdrop).forEach(el=> el.addEventListener('click', ()=>{
     selectedSetup = (selectedSetup === el.dataset.setup) ? '' : el.dataset.setup;
     $$('#t-setup-tags .tag', backdrop).forEach(t=> t.classList.toggle('on', t.dataset.setup===selectedSetup));
   }));
-  $$('#t-grade span', backdrop).forEach(el=> el.addEventListener('click', ()=>{
-    selectedGrade = (selectedGrade === +el.dataset.star) ? 0 : +el.dataset.star; syncStars();
+  $$('.grade-box', backdrop).forEach(el=> el.addEventListener('click', ()=>{
+    selectedGrade = (selectedGrade === el.dataset.grade) ? '' : el.dataset.grade; syncGrade();
   }));
 
   const dropEl = backdrop.querySelector('#t-img-drop');
@@ -543,7 +829,7 @@ function openTradeModal(id){
     const exitRaw = backdrop.querySelector('#t-exit').value;
     const qty = parseFloat(backdrop.querySelector('#t-qty').value);
     if(!symbol || !date || isNaN(entryPrice) || isNaN(qty)){
-      toast('Symbol, date, entry price and quantity are required'); return;
+      toast('Symbol, date, entry price and size are required'); return;
     }
     const trade = {
       id: editing? editing.id : DB.uid(),
@@ -552,9 +838,14 @@ function openTradeModal(id){
       entryPrice, exitPrice: exitRaw === '' ? null : parseFloat(exitRaw),
       qty, fees: parseFloat(backdrop.querySelector('#t-fees').value)||0,
       accountId: backdrop.querySelector('#t-account').value || (state.accounts[0]&&state.accounts[0].id),
+      session: backdrop.querySelector('#t-session').value,
       setup: selectedSetup, grade: selectedGrade,
       screenshot: screenshotData,
-      notes: backdrop.querySelector('#t-notes').value.trim()
+      emotionsBefore: backdrop.querySelector('#t-emo-before').value.trim(),
+      emotionsDuring: backdrop.querySelector('#t-emo-during').value.trim(),
+      notes: backdrop.querySelector('#t-notes').value.trim(),
+      mistakes: backdrop.querySelector('#t-mistakes').value.trim(),
+      lessons: backdrop.querySelector('#t-lessons').value.trim()
     };
     await DB.trades.put(trade);
     await refreshData(); renderView(); close(); toast('Trade saved');
@@ -566,7 +857,7 @@ async function boot(){
   await DB.seedIfEmpty();
   await refreshData();
   const initial = (location.hash.replace('#/','') || 'dashboard');
-  state.route = ['dashboard','trades','calendar','analytics','settings'].includes(initial) ? initial : 'dashboard';
+  state.route = ['dashboard','trades','archive','calendar','analytics','streaks','settings'].includes(initial) ? initial : 'dashboard';
   renderShell();
   renderView();
 
