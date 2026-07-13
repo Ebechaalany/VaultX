@@ -1,6 +1,6 @@
 {
-  "name": "Ledger — Trading Journal",
-  "short_name": "Ledger",
+  "name": "VaultX — Trading Journal",
+  "short_name": "VaultX",
   "description": "A private, local-first trading journal.",
   "start_url": "./index.html",
   "scope": "./",

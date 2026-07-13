@@ -1,4 +1,4 @@
-# Ledger — a local trading journal
+# VaultX — a local trading journal
 
 A lightweight, installable trading journal. No signup, no server — every
 trade lives only in your own browser (using IndexedDB), so there's nothing
