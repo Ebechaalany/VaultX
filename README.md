@@ -41,7 +41,4 @@ screenshot, setup tag, 1–5 star grade, notes), P&L calendar, analytics
 (equity curve, avg win/loss, drawdown, day-of-week & setup/instrument
 breakdowns), and settings for accounts/setups/rules.
 
-Not yet built: Goals & streaks/XP, daily mood log, AI coach chat (that one
-needs a live LLM API call, which isn't possible in a fully local/no-server
-app without you supplying an API key that would be visible in the browser
-— worth a conversation if you want it added).
+
