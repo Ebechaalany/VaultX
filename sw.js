@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vaultx-cache-v3';
+const CACHE_NAME = 'vaultx-cache-v5';
 const ASSETS = [
   './',
   './index.html',

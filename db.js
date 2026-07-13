@@ -35,6 +35,7 @@ function openDB(){
     };
     req.onsuccess = ()=>{ _db = req.result; resolve(_db); };
     req.onerror = ()=> reject(req.error);
+    req.onblocked = ()=> reject(new Error('DB_BLOCKED'));
   });
 }
 

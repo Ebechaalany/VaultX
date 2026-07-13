@@ -49,9 +49,8 @@ function toast(msg){
 }
 
 function computeTradePnl(t){
-  const dir = t.direction === 'short' ? -1 : 1;
-  const gross = (t.exitPrice - t.entryPrice) * dir * t.qty;
-  return gross - (t.fees || 0);
+  // P&L comes directly from what the user enters — not derived from entry/exit price.
+  return t.pnlInput || 0;
 }
 
 function filteredTrades(){
@@ -338,7 +337,7 @@ function renderTradeHistoryList(){
   if(!list) return;
   list.innerHTML = trades.length ? `<div class="trade-card-grid">${trades.map(tradeCardHtml).join('')}</div>` :
     `<div class="empty-state">${ICONS.empty}<div>No trades match your filters</div></div>`;
-  $$('#trade-list .trade-card').forEach(el=> el.addEventListener('click', ()=> openTradeModal(el.dataset.id)));
+  $$('#trade-list .trade-card').forEach(el=> el.addEventListener('click', ()=> openTradeDetailModal(el.dataset.id)));
 }
 function renderTradeHistory(view){
   view.innerHTML = `
@@ -421,7 +420,7 @@ function renderArchive(view){
   $$('[data-crumb="year"]', view).forEach(el=> el.addEventListener('click', ()=>{ state.archive.month = null; renderArchive(view); }));
   $$('[data-year]', view).forEach(el=> el.addEventListener('click', ()=>{ state.archive.year = el.dataset.year; renderArchive(view); }));
   $$('[data-month]', view).forEach(el=> el.addEventListener('click', ()=>{ state.archive.month = +el.dataset.month; renderArchive(view); }));
-  $$('.trade-card', view).forEach(el=> el.addEventListener('click', ()=> openTradeModal(el.dataset.id)));
+  $$('.trade-card', view).forEach(el=> el.addEventListener('click', ()=> openTradeDetailModal(el.dataset.id)));
 }
 
 // ============== Calendar ==============
@@ -713,6 +712,63 @@ function renderSettings(view){
   });
 }
 
+// ============== Trade detail (view) modal ==============
+function detailSection(title, text){
+  if(!text || !String(text).trim()) return '';
+  return `<div class="detail-block"><div class="section-title" style="margin-bottom:6px;">${title}</div><p class="detail-text">${escapeHtml(text)}</p></div>`;
+}
+
+function openTradeDetailModal(id){
+  const t = state.trades.find(x=> x.id === id);
+  if(!t) return;
+  const g = gradeInfo(t.grade);
+  const hasPnl = t.pnl !== undefined;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal">
+      <div class="modal-head">
+        <h2>${escapeHtml(t.symbol)} <span class="dir ${t.direction}" style="display:inline-flex;margin-left:8px;vertical-align:middle;">${t.direction==='short'?'SHORT':'LONG'}</span></h2>
+        <button class="close-x" id="modal-close">&times;</button>
+      </div>
+      ${t.screenshot ? `<img src="${t.screenshot}" class="detail-img" alt="Trade chart">` : ''}
+      <div class="detail-stats">
+        <div><div class="dl">Date</div><div class="dv">${t.date}</div></div>
+        <div><div class="dl">Session</div><div class="dv">${t.session ? escapeHtml(t.session) : '—'}</div></div>
+        <div><div class="dl">Size</div><div class="dv mono">${t.qty}</div></div>
+        <div><div class="dl">Entry</div><div class="dv mono">${t.entryPrice}</div></div>
+        <div><div class="dl">Exit</div><div class="dv mono">${t.exitPrice ?? '—'}</div></div>
+        <div><div class="dl">P&amp;L</div><div class="dv mono" style="${hasPnl ? (t.pnl>=0?'color:var(--green)':'color:var(--red)') : 'color:var(--text2)'}">${hasPnl ? fmtMoneyShort(t.pnl) : 'open'}</div></div>
+        <div><div class="dl">Grade</div><div class="dv" style="color:${g?g.color:'var(--text2)'};">${g?g.label:'—'}</div></div>
+        <div><div class="dl">Setup</div><div class="dv">${t.setup ? escapeHtml(t.setup) : '—'}</div></div>
+      </div>
+      ${detailSection('Emotions Before', t.emotionsBefore)}
+      ${detailSection('Emotions During', t.emotionsDuring)}
+      ${detailSection('Notes', t.notes)}
+      ${detailSection('Mistakes', t.mistakes)}
+      ${detailSection('Lessons', t.lessons)}
+      <div style="display:flex;justify-content:space-between;margin-top:6px;">
+        <button class="btn btn-danger" id="d-delete">Delete</button>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-ghost" id="d-close">Close</button>
+          <button class="btn btn-primary" id="d-edit">Edit</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+
+  function close(){ backdrop.remove(); }
+  backdrop.querySelector('#modal-close').addEventListener('click', close);
+  backdrop.querySelector('#d-close').addEventListener('click', close);
+  backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
+  backdrop.querySelector('#d-edit').addEventListener('click', ()=>{ close(); openTradeModal(id); });
+  backdrop.querySelector('#d-delete').addEventListener('click', async ()=>{
+    if(!confirm('Delete this trade? This cannot be undone.')) return;
+    await DB.trades.delete(id); await refreshData(); renderView(); close(); toast('Trade deleted');
+  });
+}
+
 // ============== Trade modal (add/edit) ==============
 function openTradeModal(id){
   const editing = id ? state.trades.find(t=> t.id === id) : null;
@@ -735,7 +791,7 @@ function openTradeModal(id){
         <div class="field"><label>Size</label><input id="t-qty" type="number" step="any" value="${editing?editing.qty:'1'}"></div>
       </div>
       <div class="field-row-pnl">
-        <div class="field"><label>P&amp;L($)</label><input id="t-fees" type="number" step="any" value="${editing?(editing.fees||0):'0'}"></div>
+        <div class="field"><label>P&amp;L($)</label><input id="t-pnl" type="number" step="any" value="${editing?(editing.pnlInput||0):'0'}"></div>
         <div class="field"><label>Account</label>
           <select id="t-account">${state.accounts.map(a=>`<option value="${a.id}" ${editing&&editing.accountId===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}</select>
         </div>
@@ -836,7 +892,7 @@ function openTradeModal(id){
       createdAt: editing? editing.createdAt : Date.now(),
       symbol, date, direction: selectedDir,
       entryPrice, exitPrice: exitRaw === '' ? null : parseFloat(exitRaw),
-      qty, fees: parseFloat(backdrop.querySelector('#t-fees').value)||0,
+      qty, pnlInput: parseFloat(backdrop.querySelector('#t-pnl').value)||0,
       accountId: backdrop.querySelector('#t-account').value || (state.accounts[0]&&state.accounts[0].id),
       session: backdrop.querySelector('#t-session').value,
       setup: selectedSetup, grade: selectedGrade,
@@ -853,16 +909,38 @@ function openTradeModal(id){
 }
 
 // ============== Boot ==============
-async function boot(){
-  await DB.seedIfEmpty();
-  await refreshData();
-  const initial = (location.hash.replace('#/','') || 'dashboard');
-  state.route = ['dashboard','trades','archive','calendar','analytics','streaks','settings'].includes(initial) ? initial : 'dashboard';
-  renderShell();
-  renderView();
+function showBootError(err){
+  const isBlocked = err && err.message === 'DB_BLOCKED';
+  const isTimeout = err && err.message === 'DB_TIMEOUT';
+  const msg = (isBlocked || isTimeout)
+    ? "This app couldn't open its local database — this usually happens when another tab or window of VaultX is already open somewhere. Close every other VaultX tab, then reload this page."
+    : "Something went wrong while loading your data. Reloading usually fixes it.";
+  $('#view').innerHTML = `
+    <div class="card" style="max-width:520px;margin-top:60px;">
+      <div class="section-title">Couldn't load VaultX</div>
+      <p style="color:var(--text1);font-size:13.5px;line-height:1.6;">${msg}</p>
+      <button class="btn btn-primary" id="boot-retry" style="margin-top:6px;">Reload</button>
+    </div>`;
+  const btn = $('#boot-retry');
+  if(btn) btn.addEventListener('click', ()=> location.reload());
+}
 
-  if('serviceWorker' in navigator){
-    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+async function boot(){
+  try{
+    const timeout = new Promise((_,reject)=> setTimeout(()=> reject(new Error('DB_TIMEOUT')), 6000));
+    await Promise.race([DB.seedIfEmpty(), timeout]);
+    await refreshData();
+    const initial = (location.hash.replace('#/','') || 'dashboard');
+    state.route = ['dashboard','trades','archive','calendar','analytics','streaks','settings'].includes(initial) ? initial : 'dashboard';
+    renderShell();
+    renderView();
+
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    }
+  }catch(err){
+    console.error('Boot failed:', err);
+    showBootError(err);
   }
 }
 boot();
