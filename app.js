@@ -23,14 +23,24 @@ const GRADES = [
 ];
 const SESSIONS = ['NY AM','NY PM','Asia','London'];
 
+const DEFAULT_FIELD_VISIBILITY = { emotionsBefore:true, emotionsDuring:true, mistakes:true, lessons:true };
+
 const state = {
   trades:[], accounts:[], setups:[], rules:[], checklist:[], goals:[],
   activeAccount:'all', route:'dashboard',
-  archive: { year:null, month:null }
+  archive: { year:null, month:null },
+  fieldVisibility: { ...DEFAULT_FIELD_VISIBILITY },
+  showWeeklyPnl: false
 };
 
 const $ = sel => document.querySelector(sel);
 const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+function pnlColor(pnl){
+  if(pnl === undefined) return 'var(--text2)';
+  if(pnl === 0) return 'var(--grey)';
+  return pnl > 0 ? 'var(--green)' : 'var(--red)';
+}
 
 function fmtMoney(n){
   const sign = n < 0 ? '-' : '';
@@ -56,15 +66,18 @@ function computeTradePnl(t){
 function filteredTrades(){
   return state.activeAccount === 'all'
     ? state.trades
-    : state.trades.filter(t=> t.accountId === state.activeAccount);
+    : state.trades.filter(t=> tradeAccountIds(t).includes(state.activeAccount));
 }
 
 function computeStats(trades){
   const closed = trades.filter(t=> t.exitPrice !== null && t.exitPrice !== undefined && t.exitPrice !== '');
   const wins = closed.filter(t=> t.pnl > 0);
   const losses = closed.filter(t=> t.pnl < 0);
+  const breakEven = closed.filter(t=> t.pnl === 0);
   const netPnl = closed.reduce((s,t)=> s + t.pnl, 0);
-  const winRate = closed.length ? (wins.length / closed.length * 100) : 0;
+  // Win rate is wins vs. (wins + losses) — breakeven trades are excluded so they can't drag it down.
+  const decisive = wins.length + losses.length;
+  const winRate = decisive ? (wins.length / decisive * 100) : 0;
   const grossWin = wins.reduce((s,t)=> s + t.pnl, 0);
   const grossLoss = Math.abs(losses.reduce((s,t)=> s + t.pnl, 0));
   const profitFactor = grossLoss > 0 ? (grossWin / grossLoss) : (grossWin > 0 ? Infinity : 0);
@@ -75,15 +88,30 @@ function computeStats(trades){
   // equity curve in chronological order
   const chrono = [...closed].sort((a,b)=> a.date.localeCompare(b.date) || a.createdAt - b.createdAt);
   let running = 0; const equity = [0];
-  let peak = 0, maxDD = 0;
+  let peak = 0, maxDD = 0, trough = 0, maxRunup = 0;
   chrono.forEach(t=>{
     running += t.pnl;
     equity.push(running);
     peak = Math.max(peak, running);
     maxDD = Math.max(maxDD, peak - running);
+    trough = Math.min(trough, running);
+    maxRunup = Math.max(maxRunup, running - trough);
   });
 
-  return { closedCount:closed.length, netPnl, winRate, profitFactor, avgWin, avgLoss, expectancy, equity, maxDD };
+  // day-level stats: only days with at least one journaled trade count.
+  // a breakeven DAY (net $0 for that day) does lower the day win rate, unlike a breakeven trade.
+  const byDay = {};
+  closed.forEach(t=>{ byDay[t.date] = (byDay[t.date]||0) + t.pnl; });
+  const dayValues = Object.values(byDay);
+  const winDays = dayValues.filter(v=> v > 0).length;
+  const lossDays = dayValues.filter(v=> v < 0).length;
+  const breakEvenDays = dayValues.filter(v=> v === 0).length;
+  const dayWinRate = dayValues.length ? (winDays / dayValues.length * 100) : 0;
+
+  return {
+    closedCount:closed.length, netPnl, winRate, profitFactor, avgWin, avgLoss, expectancy, equity, maxDD, maxRunup,
+    breakEvenCount: breakEven.length, winDays, lossDays, breakEvenDays, dayWinRate
+  };
 }
 
 function statsByDayOfWeek(trades){
@@ -108,6 +136,18 @@ function groupBy(trades, keyFn){
 }
 
 function gradeInfo(id){ return GRADES.find(g=> g.id === id); }
+
+function tradeImages(t){
+  if(Array.isArray(t.images) && t.images.length) return t.images;
+  if(t.screenshot) return [{ id:'legacy', name:'Chart', data:t.screenshot }];
+  return [];
+}
+
+function tradeAccountIds(t){
+  if(Array.isArray(t.accountIds) && t.accountIds.length) return t.accountIds;
+  if(t.accountId) return [t.accountId];
+  return [];
+}
 
 function computeStreaks(trades){
   const closed = trades.filter(t=> t.pnl !== undefined);
@@ -141,7 +181,7 @@ function computeStreaks(trades){
 
 function computeXP(trades){
   const withNotes = trades.filter(t=> t.notes && t.notes.trim()).length;
-  const withShot = trades.filter(t=> t.screenshot).length;
+  const withShot = trades.filter(t=> tradeImages(t).length).length;
   const withReflection = trades.filter(t=> (t.mistakes&&t.mistakes.trim()) || (t.lessons&&t.lessons.trim())).length;
   const xp = trades.length*20 + withNotes*5 + withShot*5 + withReflection*5;
   const perLevel = 150;
@@ -182,12 +222,15 @@ function navigate(route){
 }
 
 async function refreshData(){
-  const [trades, accounts, setups, rules, checklist, goals] = await Promise.all([
-    DB.trades.all(), DB.accounts.all(), DB.setups.all(), DB.rules.all(), DB.checklist.all(), DB.goals.all()
+  const [trades, accounts, setups, rules, checklist, goals, fieldVisibility, showWeeklyPnl] = await Promise.all([
+    DB.trades.all(), DB.accounts.all(), DB.setups.all(), DB.rules.all(), DB.checklist.all(), DB.goals.all(),
+    DB.meta.get('fieldVisibility'), DB.meta.get('showWeeklyPnl')
   ]);
   trades.forEach(t=>{ if(t.exitPrice !== null && t.exitPrice !== undefined && t.exitPrice !== ''){ t.pnl = computeTradePnl(t); } });
   state.trades = trades; state.accounts = accounts; state.setups = setups; state.rules = rules;
   state.checklist = checklist; state.goals = goals;
+  state.fieldVisibility = fieldVisibility ? { ...DEFAULT_FIELD_VISIBILITY, ...fieldVisibility } : { ...DEFAULT_FIELD_VISIBILITY };
+  state.showWeeklyPnl = !!showWeeklyPnl;
 }
 
 function renderView(){
@@ -289,7 +332,7 @@ function tradeRowHtml(t){
     </div>
     <div class="meta mono">${t.qty} size</div>
     <div class="meta mono">${t.entryPrice} → ${t.exitPrice ?? '—'}</div>
-    <div class="pnl mono" style="${hasPnl ? (t.pnl>=0?'color:var(--green)':'color:var(--red)') : 'color:var(--text2)'}">${hasPnl ? fmtMoneyShort(t.pnl) : 'open'}</div>
+    <div class="pnl mono" style="${'color:'+pnlColor(hasPnl?t.pnl:undefined)}">${hasPnl ? fmtMoneyShort(t.pnl) : 'open'}</div>
     <div class="stars" style="color:${g?g.color:'var(--text2)'};font-weight:800;">${g?g.label:'—'}</div>
   </div>`;
 }
@@ -299,7 +342,8 @@ function tradeCardHtml(t){
   const hasPnl = t.pnl !== undefined;
   return `<div class="trade-card" data-id="${t.id}">
     <div class="thumb-wrap">
-      ${t.screenshot ? `<img src="${t.screenshot}" alt="">` : `<div class="thumb-placeholder">${ICONS.image}</div>`}
+      ${tradeImages(t).length ? `<img src="${tradeImages(t)[0].data}" alt="">` : `<div class="thumb-placeholder">${ICONS.image}</div>`}
+      ${tradeImages(t).length > 1 ? `<div class="badge-count">+${tradeImages(t).length - 1}</div>` : ''}
       <div class="badge-dir ${t.direction}">${t.direction === 'short' ? 'SHORT' : 'LONG'}</div>
       ${g ? `<div class="badge-grade" style="background:${g.color};color:#04120e;">${g.label}</div>` : ''}
     </div>
@@ -308,7 +352,7 @@ function tradeCardHtml(t){
       <div class="prices mono">${t.entryPrice} → ${t.exitPrice ?? '—'}</div>
       <div class="foot">
         <span class="qty mono">${t.qty} size</span>
-        <span class="pnl-tag mono" style="${hasPnl ? (t.pnl>=0?'color:var(--green)':'color:var(--red)') : 'color:var(--text2)'}">${hasPnl ? fmtMoneyShort(t.pnl) : 'open'}</span>
+        <span class="pnl-tag mono" style="${'color:'+pnlColor(hasPnl?t.pnl:undefined)}">${hasPnl ? fmtMoneyShort(t.pnl) : 'open'}</span>
       </div>
     </div>
   </div>`;
@@ -438,39 +482,85 @@ function renderCalendar(view){
   const daysInMonth = new Date(y, m+1, 0).getDate();
   const todayStr = new Date().toISOString().slice(0,10);
 
-  let cells = '';
-  for(let i=0;i<startWeekday;i++) cells += `<div class="cal-cell empty"></div>`;
+  const cellsArr = [];
+  for(let i=0;i<startWeekday;i++) cellsArr.push(null);
   for(let d=1; d<=daysInMonth; d++){
     const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const pnl = byDay[dateStr];
-    const cls = pnl === undefined ? '' : (pnl >= 0 ? 'pos' : 'neg');
-    cells += `<div class="cal-cell ${cls} ${dateStr===todayStr?'today':''}">
-      <div class="d">${d}</div>
-      ${pnl !== undefined ? `<div class="amt mono">${fmtMoneyShort(pnl)}</div>` : ''}
-    </div>`;
+    cellsArr.push({ d, dateStr, pnl: byDay[dateStr] });
   }
+  while(cellsArr.length % 7 !== 0) cellsArr.push(null);
+  const weeks = [];
+  for(let i=0;i<cellsArr.length;i+=7) weeks.push(cellsArr.slice(i,i+7));
+
+  const weeksHtml = weeks.map(week=>{
+    const hasAny = week.some(c=> c && c.pnl !== undefined);
+    const weekTotal = week.reduce((s,c)=> s + (c && c.pnl!==undefined? c.pnl : 0), 0);
+    const dayCells = week.map(c=>{
+      if(!c) return `<div class="cal-cell empty"></div>`;
+      const cls = c.pnl===undefined ? '' : (c.pnl===0 ? 'be' : (c.pnl>0?'pos':'neg'));
+      return `<div class="cal-cell ${cls} ${c.dateStr===todayStr?'today':''}" ${c.pnl!==undefined?`data-date="${c.dateStr}"`:''}>
+        <div class="d">${c.d}</div>
+        ${c.pnl !== undefined ? `<div class="amt mono" style="color:${pnlColor(c.pnl)}">${fmtMoneyShort(c.pnl)}</div>` : ''}
+      </div>`;
+    }).join('');
+    const totalCell = state.showWeeklyPnl
+      ? `<div class="cal-week-total mono" style="color:${hasAny?pnlColor(weekTotal):'var(--text2)'}">${hasAny?fmtMoneyShort(weekTotal):'—'}</div>`
+      : '';
+    return `<div class="cal-week-row"><div class="cal-week-days">${dayCells}</div>${totalCell}</div>`;
+  }).join('');
+
+  const dowHeader = `<div class="cal-week-row" style="margin-bottom:8px;">
+    <div class="cal-week-days">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="cal-dow">${d}</div>`).join('')}</div>
+    ${state.showWeeklyPnl ? `<div class="cal-week-total-label">Week</div>` : ''}
+  </div>`;
 
   view.innerHTML = `
     <div class="topbar">
       <div><h1>Calendar</h1><div class="sub">Daily P&amp;L</div></div>
-      <div style="display:flex;gap:10px;align-items:center;">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <button class="btn btn-sm ${state.showWeeklyPnl?'btn-primary':''}" id="cal-weekly-toggle">Weekly P&amp;L: ${state.showWeeklyPnl?'On':'Off'}</button>
         <button class="btn btn-sm" id="cal-prev">&lt;</button>
         <div class="mono" style="min-width:140px;text-align:center;font-weight:700;">${first.toLocaleDateString(undefined,{month:'long', year:'numeric'})}</div>
         <button class="btn btn-sm" id="cal-next">&gt;</button>
       </div>
     </div>
     <div class="card" style="margin-bottom:16px;">
-      <div class="stat" style="padding:0;"><div class="label">Month Net P&amp;L</div><div class="value mono ${monthPnl>=0?'pos':'neg'}">${fmtMoneyShort(monthPnl)}</div></div>
+      <div class="stat" style="padding:0;"><div class="label">Month Net P&amp;L</div><div class="value mono" style="color:${pnlColor(monthPnl)}">${fmtMoneyShort(monthPnl)}</div></div>
     </div>
     <div class="card">
-      <div class="cal-grid" style="margin-bottom:8px;">
-        ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="cal-dow">${d}</div>`).join('')}
-      </div>
-      <div class="cal-grid">${cells}</div>
+      ${dowHeader}
+      ${weeksHtml}
     </div>
   `;
   $('#cal-prev').addEventListener('click', ()=>{ calCursor = new Date(y, m-1, 1); renderCalendar(view); });
   $('#cal-next').addEventListener('click', ()=>{ calCursor = new Date(y, m+1, 1); renderCalendar(view); });
+  $('#cal-weekly-toggle').addEventListener('click', async ()=>{
+    await DB.meta.put('showWeeklyPnl', !state.showWeeklyPnl);
+    await refreshData(); renderCalendar(view);
+  });
+  $$('.cal-cell[data-date]', view).forEach(el=> el.addEventListener('click', ()=> openDayTradesModal(el.dataset.date)));
+}
+
+function openDayTradesModal(dateStr){
+  const trades = filteredTrades().filter(t=> t.date === dateStr && t.pnl !== undefined);
+  const dayPnl = trades.reduce((s,t)=> s+t.pnl, 0);
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal">
+      <div class="modal-head">
+        <h2>${new Date(dateStr+'T00:00:00').toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'})}</h2>
+        <button class="close-x" id="modal-close">&times;</button>
+      </div>
+      <div class="stat" style="padding:0 0 14px;"><div class="label">Day Net P&amp;L</div><div class="value mono" style="color:${pnlColor(dayPnl)}">${fmtMoneyShort(dayPnl)}</div></div>
+      ${trades.length ? `<div class="trade-card-grid">${trades.map(tradeCardHtml).join('')}</div>` : `<div class="empty-state">${ICONS.empty}<div>No trades that day</div></div>`}
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  function close(){ backdrop.remove(); }
+  backdrop.querySelector('#modal-close').addEventListener('click', close);
+  backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
+  $$('.trade-card', backdrop).forEach(el=> el.addEventListener('click', ()=>{ close(); openTradeDetailModal(el.dataset.id); }));
 }
 
 // ============== Analytics ==============
@@ -489,11 +579,21 @@ function renderAnalytics(view){
         <div class="section-title">Equity Curve</div>
         <canvas id="an-equity" style="width:100%;height:200px;display:block;"></canvas>
       </div>
-      <div class="grid-3" style="grid-template-columns:1fr 1fr;">
+      <div class="grid-3" style="grid-template-columns:repeat(3,1fr);">
         <div class="card stat"><div class="label">Avg Win</div><div class="value pos mono">${fmtMoneyShort(s.avgWin)}</div></div>
         <div class="card stat"><div class="label">Avg Loss</div><div class="value neg mono">${fmtMoneyShort(s.avgLoss)}</div></div>
         <div class="card stat"><div class="label">Max Drawdown</div><div class="value neg mono">${fmtMoneyShort(-s.maxDD)}</div></div>
+        <div class="card stat"><div class="label">Max Run-up</div><div class="value pos mono">${fmtMoneyShort(s.maxRunup)}</div></div>
         <div class="card stat"><div class="label">Expectancy</div><div class="value gold mono">${fmtMoneyShort(s.expectancy)}</div></div>
+        <div class="card stat"><div class="label">Day Win Rate</div><div class="value gold mono">${s.dayWinRate.toFixed(1)}%</div></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="section-title">Days Breakdown</div>
+      <div class="grid-3">
+        <div class="card stat" style="background:var(--bg-2);"><div class="label">Winning Days</div><div class="value pos mono">${s.winDays}</div></div>
+        <div class="card stat" style="background:var(--bg-2);"><div class="label">Losing Days</div><div class="value neg mono">${s.lossDays}</div></div>
+        <div class="card stat" style="background:var(--bg-2);"><div class="label">Breakeven Days</div><div class="value mono" style="color:var(--grey);">${s.breakEvenDays}</div></div>
       </div>
     </div>
     <div class="card" style="margin-bottom:16px;">
@@ -601,6 +701,19 @@ function renderGoalsList(){
     await DB.goals.delete(b.dataset.goalDel); await refreshData(); renderGoalsList();
   }));
 }
+async function recomputeAccountMinBalance(accountId){
+  const acc = state.accounts.find(a=> a.id === accountId);
+  if(!acc) return;
+  const trades = state.trades
+    .filter(t=> tradeAccountIds(t).includes(accountId) && t.pnl !== undefined)
+    .sort((a,b)=> a.date.localeCompare(b.date) || a.createdAt - b.createdAt);
+  let running = acc.balance || 0;
+  let minSeen = running;
+  trades.forEach(t=>{ running += t.pnl; minSeen = Math.min(minSeen, running); });
+  acc.minBalance = minSeen;
+  await DB.accounts.put(acc);
+}
+
 function renderSettings(view){
   view.innerHTML = `
     <div class="topbar"><div><h1>Settings</h1><div class="sub">Accounts, setups, rules &amp; backups</div></div></div>
@@ -614,6 +727,21 @@ function renderSettings(view){
         <input id="acc-balance" type="number" step="0.01" placeholder="Starting balance">
       </div>
       <button class="btn btn-sm" id="acc-add" style="margin-top:10px;">${ICONS.plus}Add Account</button>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="section-title">Trade Journal Fields</div>
+      <p style="color:var(--text1);font-size:13px;margin-top:0;">Turn off any of these and they won't appear on the New Trade form.</p>
+      <div class="checklist" id="field-toggles">
+        ${[
+          ['emotionsBefore','Emotions Before'], ['emotionsDuring','Emotions During'],
+          ['mistakes','Mistakes'], ['lessons','Lessons']
+        ].map(([key,label])=> `
+          <div class="checklist-item">
+            <input type="checkbox" data-field-toggle="${key}" ${state.fieldVisibility[key]?'checked':''}>
+            <span>${label}</span>
+          </div>`).join('')}
+      </div>
     </div>
 
     <div class="grid-2" style="margin-bottom:16px;">
@@ -648,11 +776,20 @@ function renderSettings(view){
   $('#accounts-list').innerHTML = state.accounts.map(a=> `
     <div class="account-card">
       <div><div class="name">${escapeHtml(a.name)}</div><div class="type">${a.type}</div></div>
-      <div style="display:flex;align-items:center;gap:12px;">
-        <div class="bal">${fmtMoney(a.balance||0)}</div>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <div style="text-align:right;">
+          <div class="bal">${fmtMoney(a.balance||0)}</div>
+          <div style="font-size:11px;color:var(--text2);">Min reached: ${fmtMoney(a.minBalance!=null?a.minBalance:(a.balance||0))}</div>
+        </div>
         <button class="btn btn-sm btn-danger" data-del-acc="${a.id}">Remove</button>
       </div>
     </div>`).join('') || `<div style="color:var(--text1);font-size:13px;">No accounts yet.</div>`;
+
+  $$('[data-field-toggle]').forEach(cb=> cb.addEventListener('change', async ()=>{
+    const updated = { ...state.fieldVisibility, [cb.dataset.fieldToggle]: cb.checked };
+    await DB.meta.put('fieldVisibility', updated);
+    await refreshData();
+  }));
 
   $('#setups-list').innerHTML = state.setups.map(s=> `
     <div class="list-editor-row"><span>${escapeHtml(s.name)}</span><button class="btn btn-sm btn-danger" data-del-setup="${s.id}">×</button></div>
@@ -665,7 +802,8 @@ function renderSettings(view){
   $('#acc-add').addEventListener('click', async ()=>{
     const name = $('#acc-name').value.trim();
     if(!name) return toast('Give the account a name');
-    await DB.accounts.put({ id: DB.uid(), name, type: $('#acc-type').value, balance: parseFloat($('#acc-balance').value)||0 });
+    const balance = parseFloat($('#acc-balance').value)||0;
+    await DB.accounts.put({ id: DB.uid(), name, type: $('#acc-type').value, balance, minBalance: balance });
     await refreshData(); renderSettings(view); toast('Account added');
   });
   $$('[data-del-acc]').forEach(b=> b.addEventListener('click', async ()=>{
@@ -718,6 +856,44 @@ function detailSection(title, text){
   return `<div class="detail-block"><div class="section-title" style="margin-bottom:6px;">${title}</div><p class="detail-text">${escapeHtml(text)}</p></div>`;
 }
 
+function galleryHtml(t){
+  const imgs = tradeImages(t);
+  if(!imgs.length) return '';
+  return `<div class="detail-gallery">${imgs.map((img,i)=> `
+    <div class="detail-gallery-item" data-zoom-idx="${i}">
+      <img src="${img.data}" alt="${escapeHtml(img.name||'')}">
+      ${img.name ? `<div class="detail-gallery-caption">${escapeHtml(img.name)}</div>` : ''}
+    </div>`).join('')}</div>`;
+}
+
+function openImageLightbox(src, name){
+  let scale = 1;
+  const lb = document.createElement('div');
+  lb.className = 'lightbox-backdrop';
+  lb.innerHTML = `
+    <button class="close-x lightbox-close" id="lb-close">&times;</button>
+    <div class="lightbox-zoom-controls">
+      <button id="lb-out">−</button>
+      <button id="lb-reset">Reset</button>
+      <button id="lb-in">+</button>
+    </div>
+    <div class="lightbox-imgwrap"><img src="${src}" id="lb-img" alt=""></div>
+    ${name ? `<div class="lightbox-caption">${escapeHtml(name)}</div>` : ''}
+  `;
+  document.body.appendChild(lb);
+  const img = lb.querySelector('#lb-img');
+  function applyScale(){ img.style.transform = `scale(${scale})`; img.style.cursor = scale > 1 ? 'zoom-out' : 'zoom-in'; }
+  img.addEventListener('click', e=>{ e.stopPropagation(); scale = scale > 1 ? 1 : 2.2; applyScale(); });
+  lb.querySelector('#lb-in').addEventListener('click', ()=>{ scale = Math.min(4, scale + 0.5); applyScale(); });
+  lb.querySelector('#lb-out').addEventListener('click', ()=>{ scale = Math.max(1, scale - 0.5); applyScale(); });
+  lb.querySelector('#lb-reset').addEventListener('click', ()=>{ scale = 1; applyScale(); });
+  function close(){ lb.remove(); document.removeEventListener('keydown', onKey); }
+  function onKey(e){ if(e.key === 'Escape') close(); }
+  lb.addEventListener('click', e=>{ if(e.target === lb) close(); });
+  lb.querySelector('#lb-close').addEventListener('click', close);
+  document.addEventListener('keydown', onKey);
+}
+
 function openTradeDetailModal(id){
   const t = state.trades.find(x=> x.id === id);
   if(!t) return;
@@ -731,14 +907,14 @@ function openTradeDetailModal(id){
         <h2>${escapeHtml(t.symbol)} <span class="dir ${t.direction}" style="display:inline-flex;margin-left:8px;vertical-align:middle;">${t.direction==='short'?'SHORT':'LONG'}</span></h2>
         <button class="close-x" id="modal-close">&times;</button>
       </div>
-      ${t.screenshot ? `<img src="${t.screenshot}" class="detail-img" alt="Trade chart">` : ''}
+      ${galleryHtml(t)}
       <div class="detail-stats">
         <div><div class="dl">Date</div><div class="dv">${t.date}</div></div>
         <div><div class="dl">Session</div><div class="dv">${t.session ? escapeHtml(t.session) : '—'}</div></div>
         <div><div class="dl">Size</div><div class="dv mono">${t.qty}</div></div>
         <div><div class="dl">Entry</div><div class="dv mono">${t.entryPrice}</div></div>
         <div><div class="dl">Exit</div><div class="dv mono">${t.exitPrice ?? '—'}</div></div>
-        <div><div class="dl">P&amp;L</div><div class="dv mono" style="${hasPnl ? (t.pnl>=0?'color:var(--green)':'color:var(--red)') : 'color:var(--text2)'}">${hasPnl ? fmtMoneyShort(t.pnl) : 'open'}</div></div>
+        <div><div class="dl">P&amp;L</div><div class="dv mono" style="${'color:'+pnlColor(hasPnl?t.pnl:undefined)}">${hasPnl ? fmtMoneyShort(t.pnl) : 'open'}</div></div>
         <div><div class="dl">Grade</div><div class="dv" style="color:${g?g.color:'var(--text2)'};">${g?g.label:'—'}</div></div>
         <div><div class="dl">Setup</div><div class="dv">${t.setup ? escapeHtml(t.setup) : '—'}</div></div>
       </div>
@@ -765,8 +941,16 @@ function openTradeDetailModal(id){
   backdrop.querySelector('#d-edit').addEventListener('click', ()=>{ close(); openTradeModal(id); });
   backdrop.querySelector('#d-delete').addEventListener('click', async ()=>{
     if(!confirm('Delete this trade? This cannot be undone.')) return;
-    await DB.trades.delete(id); await refreshData(); renderView(); close(); toast('Trade deleted');
+    const accIds = tradeAccountIds(t);
+    await DB.trades.delete(id); await refreshData();
+    for(const accId of accIds) await recomputeAccountMinBalance(accId);
+    await refreshData(); renderView(); close(); toast('Trade deleted');
   });
+  const imgs = tradeImages(t);
+  $$('.detail-gallery-item', backdrop).forEach(el=> el.addEventListener('click', ()=>{
+    const img = imgs[+el.dataset.zoomIdx];
+    openImageLightbox(img.data, img.name);
+  }));
 }
 
 // ============== Trade modal (add/edit) ==============
@@ -792,8 +976,8 @@ function openTradeModal(id){
       </div>
       <div class="field-row-pnl">
         <div class="field"><label>P&amp;L($)</label><input id="t-pnl" type="number" step="any" value="${editing?(editing.pnlInput||0):'0'}"></div>
-        <div class="field"><label>Account</label>
-          <select id="t-account">${state.accounts.map(a=>`<option value="${a.id}" ${editing&&editing.accountId===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}</select>
+        <div class="field"><label>Account(s)</label>
+          <div class="tag-list" id="t-account-tags">${state.accounts.map(a=>`<div class="tag ${editing? (tradeAccountIds(editing).includes(a.id)?'on':'') : (state.accounts[0]&&state.accounts[0].id===a.id?'on':'')}" data-account="${a.id}">${escapeHtml(a.name)}</div>`).join('') || '<span style="color:var(--text1);font-size:12px;">Add accounts in Settings</span>'}</div>
         </div>
         <div class="field"><label>Session</label>
           <select id="t-session"><option value="">Select session</option>${SESSIONS.map(s=>`<option value="${s}" ${editing&&editing.session===s?'selected':''}>${s}</option>`).join('')}</select>
@@ -808,15 +992,15 @@ function openTradeModal(id){
             <span class="letter">${g.label}</span><span class="desc">${g.desc}</span>
           </div>`).join('')}</div>
       </div>
-      <div class="field"><label>Emotions Before</label><textarea id="t-emo-before" placeholder="How did you feel going into this trade?">${editing?escapeHtml(editing.emotionsBefore||''):''}</textarea></div>
-      <div class="field"><label>Emotions During</label><textarea id="t-emo-during" placeholder="How did you feel while it played out?">${editing?escapeHtml(editing.emotionsDuring||''):''}</textarea></div>
+      ${state.fieldVisibility.emotionsBefore ? `<div class="field"><label>Emotions Before</label><textarea id="t-emo-before" placeholder="How did you feel going into this trade?">${editing?escapeHtml(editing.emotionsBefore||''):''}</textarea></div>` : ''}
+      ${state.fieldVisibility.emotionsDuring ? `<div class="field"><label>Emotions During</label><textarea id="t-emo-during" placeholder="How did you feel while it played out?">${editing?escapeHtml(editing.emotionsDuring||''):''}</textarea></div>` : ''}
       <div class="field"><label>Notes</label><textarea id="t-notes" placeholder="Setup reasoning, execution…">${editing?escapeHtml(editing.notes||''):''}</textarea></div>
-      <div class="field"><label>Mistakes</label><textarea id="t-mistakes" placeholder="What went wrong?">${editing?escapeHtml(editing.mistakes||''):''}</textarea></div>
-      <div class="field"><label>Lessons</label><textarea id="t-lessons" placeholder="What will you do differently?">${editing?escapeHtml(editing.lessons||''):''}</textarea></div>
-      <div class="field"><label>Chart screenshot</label>
-        <div class="img-drop" id="t-img-drop">Click to attach a screenshot</div>
-        <input type="file" id="t-img-input" accept="image/*" style="display:none;">
-        <img id="t-img-preview" class="img-preview" style="display:${editing&&editing.screenshot?'block':'none'};" src="${editing&&editing.screenshot?editing.screenshot:''}">
+      ${state.fieldVisibility.mistakes ? `<div class="field"><label>Mistakes</label><textarea id="t-mistakes" placeholder="What went wrong?">${editing?escapeHtml(editing.mistakes||''):''}</textarea></div>` : ''}
+      ${state.fieldVisibility.lessons ? `<div class="field"><label>Lessons</label><textarea id="t-lessons" placeholder="What will you do differently?">${editing?escapeHtml(editing.lessons||''):''}</textarea></div>` : ''}
+      <div class="field"><label>Chart screenshots</label>
+        <div class="img-drop" id="t-img-drop">Click to add screenshot(s) — you can select more than one</div>
+        <input type="file" id="t-img-input" accept="image/*" multiple style="display:none;">
+        <div class="image-manager" id="t-img-list"></div>
       </div>
       <div style="display:flex;justify-content:space-between;margin-top:6px;">
         <div>${editing? `<button class="btn btn-danger" id="t-delete">Delete</button>` : ''}</div>
@@ -829,7 +1013,28 @@ function openTradeModal(id){
   let selectedDir = editing? editing.direction : 'long';
   let selectedSetup = editing? editing.setup : '';
   let selectedGrade = editing? (editing.grade||'') : '';
-  let screenshotData = editing? (editing.screenshot||null) : null;
+  let selectedAccountIds = editing? tradeAccountIds(editing) : (state.accounts[0] ? [state.accounts[0].id] : []);
+  let photos = editing? tradeImages(editing).map(p=> ({...p})) : [];
+
+  function renderImageManager(){
+    const el = backdrop.querySelector('#t-img-list');
+    el.innerHTML = photos.length ? photos.map((p,idx)=> `
+      <div class="image-manager-item">
+        <img src="${p.data}" class="image-manager-thumb" data-zoom-idx="${idx}" alt="">
+        <input type="text" class="image-manager-name" data-name-idx="${idx}" placeholder="Name this photo" value="${escapeHtml(p.name||'')}">
+        <button class="del" data-del-idx="${idx}" title="Remove photo">×</button>
+      </div>`).join('') : `<div style="color:var(--text1);font-size:12px;padding:4px 0;">No photos attached yet.</div>`;
+    $$('.image-manager-thumb', el).forEach(img=> img.addEventListener('click', ()=>{
+      const p = photos[+img.dataset.zoomIdx]; openImageLightbox(p.data, p.name);
+    }));
+    $$('.image-manager-name', el).forEach(inp=> inp.addEventListener('input', e=>{
+      photos[+inp.dataset.nameIdx].name = e.target.value;
+    }));
+    $$('[data-del-idx]', el).forEach(btn=> btn.addEventListener('click', ()=>{
+      photos.splice(+btn.dataset.delIdx, 1); renderImageManager();
+    }));
+  }
+  renderImageManager();
 
   function syncDir(){ $$('.pill-choice',backdrop).forEach(el=> el.classList.toggle('on', el.dataset.dir===selectedDir)); }
   function syncGrade(){
@@ -848,25 +1053,49 @@ function openTradeModal(id){
     selectedSetup = (selectedSetup === el.dataset.setup) ? '' : el.dataset.setup;
     $$('#t-setup-tags .tag', backdrop).forEach(t=> t.classList.toggle('on', t.dataset.setup===selectedSetup));
   }));
+  $$('#t-account-tags .tag', backdrop).forEach(el=> el.addEventListener('click', ()=>{
+    const id = el.dataset.account;
+    if(selectedAccountIds.includes(id)) selectedAccountIds = selectedAccountIds.filter(x=> x!==id);
+    else selectedAccountIds.push(id);
+    el.classList.toggle('on', selectedAccountIds.includes(id));
+  }));
   $$('.grade-box', backdrop).forEach(el=> el.addEventListener('click', ()=>{
     selectedGrade = (selectedGrade === el.dataset.grade) ? '' : el.dataset.grade; syncGrade();
   }));
 
   const dropEl = backdrop.querySelector('#t-img-drop');
   const imgInput = backdrop.querySelector('#t-img-input');
-  dropEl.addEventListener('click', ()=> imgInput.click());
-  imgInput.addEventListener('change', ()=>{
-    const file = imgInput.files[0]; if(!file) return;
-    const reader = new FileReader();
-    reader.onload = ()=>{
-      screenshotData = reader.result;
-      const preview = backdrop.querySelector('#t-img-preview');
-      preview.src = screenshotData; preview.style.display = 'block';
-    };
-    reader.readAsDataURL(file);
-  });
 
-  function close(){ backdrop.remove(); }
+  function addPhotoFiles(fileList){
+    Array.from(fileList).forEach(file=>{
+      if(!file.type || !file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        photos.push({ id: DB.uid(), name: file.name ? file.name.replace(/\.[^.]+$/,'') : '', data: reader.result });
+        renderImageManager();
+      };
+      reader.readAsDataURL(file); // full-quality data URL, no resizing/recompression
+    });
+  }
+
+  dropEl.addEventListener('click', ()=> imgInput.click());
+  imgInput.addEventListener('change', ()=>{ addPhotoFiles(imgInput.files); imgInput.value = ''; });
+  dropEl.addEventListener('dragover', e=>{ e.preventDefault(); dropEl.classList.add('drag-over'); });
+  dropEl.addEventListener('dragleave', ()=> dropEl.classList.remove('drag-over'));
+  dropEl.addEventListener('drop', e=>{
+    e.preventDefault(); dropEl.classList.remove('drag-over');
+    if(e.dataTransfer && e.dataTransfer.files.length) addPhotoFiles(e.dataTransfer.files);
+  });
+  function onPaste(e){
+    if(!e.clipboardData) return;
+    const items = Array.from(e.clipboardData.items).filter(i=> i.type && i.type.startsWith('image/'));
+    if(!items.length) return;
+    const files = items.map(i=> i.getAsFile()).filter(Boolean);
+    if(files.length) addPhotoFiles(files);
+  }
+  document.addEventListener('paste', onPaste);
+
+  function close(){ backdrop.remove(); document.removeEventListener('paste', onPaste); }
   backdrop.querySelector('#modal-close').addEventListener('click', close);
   backdrop.querySelector('#t-cancel').addEventListener('click', close);
   backdrop.addEventListener('click', e=>{ if(e.target === backdrop) close(); });
@@ -874,7 +1103,10 @@ function openTradeModal(id){
   if(editing){
     backdrop.querySelector('#t-delete').addEventListener('click', async ()=>{
       if(!confirm('Delete this trade? This cannot be undone.')) return;
-      await DB.trades.delete(editing.id); await refreshData(); renderView(); close(); toast('Trade deleted');
+      const accIds = tradeAccountIds(editing);
+      await DB.trades.delete(editing.id); await refreshData();
+      for(const accId of accIds) await recomputeAccountMinBalance(accId);
+      await refreshData(); renderView(); close(); toast('Trade deleted');
     });
   }
 
@@ -887,23 +1119,28 @@ function openTradeModal(id){
     if(!symbol || !date || isNaN(entryPrice) || isNaN(qty)){
       toast('Symbol, date, entry price and size are required'); return;
     }
+    const readField = (id, fallback)=>{ const el = backdrop.querySelector('#'+id); return el ? el.value.trim() : (fallback!==undefined? fallback : (editing?editing[id]:'')); };
+    const oldAccountIds = editing ? tradeAccountIds(editing) : [];
     const trade = {
       id: editing? editing.id : DB.uid(),
       createdAt: editing? editing.createdAt : Date.now(),
       symbol, date, direction: selectedDir,
       entryPrice, exitPrice: exitRaw === '' ? null : parseFloat(exitRaw),
       qty, pnlInput: parseFloat(backdrop.querySelector('#t-pnl').value)||0,
-      accountId: backdrop.querySelector('#t-account').value || (state.accounts[0]&&state.accounts[0].id),
+      accountIds: selectedAccountIds,
       session: backdrop.querySelector('#t-session').value,
       setup: selectedSetup, grade: selectedGrade,
-      screenshot: screenshotData,
-      emotionsBefore: backdrop.querySelector('#t-emo-before').value.trim(),
-      emotionsDuring: backdrop.querySelector('#t-emo-during').value.trim(),
+      images: photos,
+      emotionsBefore: backdrop.querySelector('#t-emo-before') ? backdrop.querySelector('#t-emo-before').value.trim() : (editing?editing.emotionsBefore||'':''),
+      emotionsDuring: backdrop.querySelector('#t-emo-during') ? backdrop.querySelector('#t-emo-during').value.trim() : (editing?editing.emotionsDuring||'':''),
       notes: backdrop.querySelector('#t-notes').value.trim(),
-      mistakes: backdrop.querySelector('#t-mistakes').value.trim(),
-      lessons: backdrop.querySelector('#t-lessons').value.trim()
+      mistakes: backdrop.querySelector('#t-mistakes') ? backdrop.querySelector('#t-mistakes').value.trim() : (editing?editing.mistakes||'':''),
+      lessons: backdrop.querySelector('#t-lessons') ? backdrop.querySelector('#t-lessons').value.trim() : (editing?editing.lessons||'':'')
     };
     await DB.trades.put(trade);
+    const affectedAccounts = Array.from(new Set([...oldAccountIds, ...selectedAccountIds]));
+    await refreshData();
+    for(const accId of affectedAccounts) await recomputeAccountMinBalance(accId);
     await refreshData(); renderView(); close(); toast('Trade saved');
   });
 }

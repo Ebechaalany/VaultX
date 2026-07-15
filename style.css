@@ -14,7 +14,7 @@
 ==================================================== */
 :root{
   --bg-0:#0a0d12; --bg-1:#10141b; --bg-2:#171d27; --line:#232b38;
-  --teal:#2dd4bf; --teal-dim:#1c8f82; --gold:#f4c430; --green:#34d67a; --red:#f2555a;
+  --teal:#2dd4bf; --teal-dim:#1c8f82; --gold:#f4c430; --green:#34d67a; --red:#f2555a; --grey:#8b96a5;
   --text0:#e8ecf1; --text1:#8b96a5; --text2:#5b6472;
   --radius:14px; --radius-sm:8px;
   --shadow-card: 0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px -12px rgba(0,0,0,.6);
@@ -213,6 +213,17 @@ input[type=file]{ padding:8px; }
 }
 #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
+/* ================= Calendar (week rows + weekly total) ================= */
+.cal-week-row{ display:flex; gap:8px; align-items:stretch; margin-bottom:8px; }
+.cal-week-days{ flex:1; display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
+.cal-week-total{ width:88px; flex:none; display:flex; align-items:center; justify-content:center; background:var(--bg-2); border:1px solid var(--line); border-radius:10px; font-weight:700; font-size:12.5px; }
+.cal-week-total-label{ width:88px; flex:none; display:flex; align-items:center; justify-content:center; color:var(--text1); font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+.cal-cell.be{ background:linear-gradient(160deg,rgba(139,150,165,.22),rgba(139,150,165,.08)); border-color:rgba(139,150,165,.4); }
+.cal-cell.be .d{ color:var(--text0); }
+@media (max-width:880px){
+  .cal-week-total, .cal-week-total-label{ width:56px; font-size:11px; }
+}
+
 /* ================= Grade boxes (A-F) ================= */
 .grade-row{ display:flex; flex-direction:column; gap:8px; }
 .grade-box{
@@ -228,6 +239,48 @@ input[type=file]{ padding:8px; }
 /* ================= Small field variant (P&L box) ================= */
 .field-row-pnl{ display:grid; grid-template-columns:120px 1fr 1fr; gap:12px; }
 @media (max-width:880px){ .field-row-pnl{ grid-template-columns:1fr; } }
+
+/* ================= Chart hover tooltip ================= */
+.chart-tooltip{
+  position:absolute; display:none; transform:translate(-50%,0); background:var(--bg-2); border:1px solid var(--teal-dim);
+  color:var(--text0); font-family:'IBM Plex Mono',monospace; font-size:11.5px; font-weight:600; padding:4px 9px;
+  border-radius:7px; pointer-events:none; white-space:nowrap; z-index:5;
+}
+.chart-guide{
+  position:absolute; display:none; width:1px; background:rgba(139,150,165,.3); pointer-events:none; z-index:4;
+}
+
+/* ================= Multi-photo manager (trade form) ================= */
+.img-drop.drag-over{ border-color:var(--teal); background:rgba(45,212,191,.06); color:var(--teal); }
+.image-manager{ display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+.image-manager-item{ display:flex; align-items:center; gap:10px; background:var(--bg-2); border:1px solid var(--line); border-radius:10px; padding:8px; }
+.image-manager-thumb{ width:52px; height:52px; object-fit:cover; border-radius:8px; cursor:zoom-in; flex:none; }
+.image-manager-name{ flex:1; }
+.image-manager-item .del{ background:none; border:none; color:var(--text2); cursor:pointer; font-size:18px; padding:2px 8px; flex:none; }
+.image-manager-item .del:hover{ color:var(--red); }
+
+/* ================= Detail gallery ================= */
+.detail-gallery{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; margin:14px 0; }
+.detail-gallery-item{ cursor:zoom-in; border-radius:10px; overflow:hidden; border:1px solid var(--line); background:var(--bg-2); }
+.detail-gallery-item img{ width:100%; height:100px; object-fit:cover; display:block; }
+.detail-gallery-caption{ font-size:11px; color:var(--text1); padding:5px 8px; background:var(--bg-1); }
+
+/* ================= Lightbox (zoomable photo viewer) ================= */
+.lightbox-backdrop{
+  position:fixed; inset:0; background:rgba(4,6,10,.92); display:flex; flex-direction:column; align-items:center; justify-content:center;
+  z-index:200; padding:40px;
+}
+.lightbox-imgwrap{ max-width:100%; max-height:74vh; overflow:auto; display:flex; align-items:center; justify-content:center; }
+.lightbox-imgwrap img{ max-width:100%; max-height:74vh; border-radius:8px; transition:transform .15s ease; cursor:zoom-in; }
+.lightbox-zoom-controls{ display:flex; gap:8px; margin-bottom:14px; }
+.lightbox-zoom-controls button{
+  background:var(--bg-2); border:1px solid var(--line); color:var(--text0); padding:7px 14px; border-radius:8px;
+  cursor:pointer; font-weight:700; font-size:13px;
+}
+.lightbox-zoom-controls button:hover{ border-color:var(--teal-dim); }
+.lightbox-caption{ margin-top:14px; color:#fff; font-size:13px; background:rgba(255,255,255,.08); padding:6px 16px; border-radius:8px; }
+.lightbox-close{ position:absolute; top:16px; right:20px; color:#fff; font-size:30px; }
+.badge-count{ position:absolute; bottom:8px; right:8px; background:rgba(4,6,10,.75); color:#fff; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:6px; }
 
 /* ================= Trade cards (Trade History / Archive) ================= */
 .trade-card-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px; }

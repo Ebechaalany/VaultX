@@ -204,6 +204,25 @@ const DB = {
     }
   },
 
+  meta: {
+    async get(key){
+      const store = await tx('meta');
+      return new Promise((res, rej)=>{
+        const req = store.get(key);
+        req.onsuccess = ()=> res(req.result ? req.result.value : undefined);
+        req.onerror = ()=> rej(req.error);
+      });
+    },
+    async put(key, value){
+      const store = await tx('meta','readwrite');
+      return new Promise((res, rej)=>{
+        const req = store.put({ key, value });
+        req.onsuccess = ()=> res(value);
+        req.onerror = ()=> rej(req.error);
+      });
+    }
+  },
+
   goals: {
     async all(){
       const store = await tx('goals');
