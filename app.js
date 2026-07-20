@@ -277,11 +277,11 @@ function renderDashboard(view){
     <div class="grid-2">
       <div class="card bracket">
         <div class="section-title">Equity Curve</div>
-        <canvas id="equity-canvas" style="width:100%;height:248px;display:block;"></canvas>
+        <canvas id="equity-canvas" style="width:100%;flex:1;min-height:200px;display:block;"></canvas>
       </div>
       <div class="card">
         <div class="section-title">Recent Trades</div>
-        <div id="recent-trades"></div>
+        <div id="recent-trades" style="flex:1;"></div>
       </div>
     </div>
     <div class="card" style="margin-top:16px;">
@@ -601,7 +601,7 @@ function renderAnalytics(view){
     <div class="grid-2" style="margin-bottom:16px;">
       <div class="card bracket">
         <div class="section-title">Equity Curve</div>
-        <canvas id="an-equity" style="width:100%;height:224px;display:block;"></canvas>
+        <canvas id="an-equity" style="width:100%;flex:1;min-height:200px;display:block;"></canvas>
       </div>
       <div class="grid-3" style="grid-template-columns:repeat(3,1fr);">
         <div class="card stat"><div class="label">Avg Win</div><div class="value pos mono">${fmtMoneyShort(s.avgWin)}</div></div>
