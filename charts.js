@@ -89,25 +89,39 @@ function bindEquityHover(canvas, series, pad, stepX, w, h, xAt, yAt){
     host.appendChild(guide);
   }
 
-  canvas.onmousemove = (e)=>{
+  let rafPending = false;
+  let lastEvent = null;
+
+  function update(){
+    rafPending = false;
+    if(!lastEvent) return;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    const x = lastEvent.clientX - rect.left;
+    // guard against stale hover after the canvas has been removed/resized
+    if(x < -20 || x > rect.width + 20) return;
     let idx = Math.round((x - pad.l) / stepX);
     idx = Math.max(0, Math.min(series.length - 1, idx));
     const val = series[idx];
-    const px = xAt(idx), py = yAt(val);
+    const px = canvas.offsetLeft + xAt(idx);
+    const py = canvas.offsetTop + yAt(val);
     tip.textContent = (val >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(val)).toLocaleString();
     tip.style.display = 'block';
     tip.style.left = px + 'px';
-    let top = py - 30;
-    if(top < 0) top = py + 10;
+    let top = py - 34;
+    if(top < 0) top = py + 12;
     tip.style.top = top + 'px';
     guide.style.display = 'block';
     guide.style.left = px + 'px';
-    guide.style.top = pad.t + 'px';
+    guide.style.top = (canvas.offsetTop + pad.t) + 'px';
     guide.style.height = (h - pad.t - pad.b) + 'px';
+  }
+
+  canvas.onmousemove = (e)=>{
+    lastEvent = e;
+    if(!rafPending){ rafPending = true; requestAnimationFrame(update); }
   };
   canvas.onmouseleave = ()=>{
+    lastEvent = null;
     tip.style.display = 'none';
     guide.style.display = 'none';
   };

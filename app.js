@@ -26,7 +26,7 @@ const SESSIONS = ['NY AM','NY PM','Asia','London'];
 const DEFAULT_FIELD_VISIBILITY = { emotionsBefore:true, emotionsDuring:true, mistakes:true, lessons:true };
 
 const state = {
-  trades:[], accounts:[], setups:[], rules:[], checklist:[], goals:[],
+  trades:[], accounts:[], setups:[], rules:[], checklist:[], goals:[], customFields:[],
   activeAccount:'all', route:'dashboard',
   archive: { year:null, month:null },
   fieldVisibility: { ...DEFAULT_FIELD_VISIBILITY },
@@ -40,6 +40,19 @@ function pnlColor(pnl){
   if(pnl === undefined) return 'var(--text2)';
   if(pnl === 0) return 'var(--grey)';
   return pnl > 0 ? 'var(--green)' : 'var(--red)';
+}
+
+function animateCountUp(el, target, formatFn, duration=650){
+  if(!el) return;
+  const startTime = performance.now();
+  function tick(now){
+    const p = Math.min(1, (now - startTime) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = formatFn(target * eased);
+    if(p < 1) requestAnimationFrame(tick);
+    else el.textContent = formatFn(target);
+  }
+  requestAnimationFrame(tick);
 }
 
 function fmtMoney(n){
@@ -222,15 +235,16 @@ function navigate(route){
 }
 
 async function refreshData(){
-  const [trades, accounts, setups, rules, checklist, goals, fieldVisibility, showWeeklyPnl] = await Promise.all([
+  const [trades, accounts, setups, rules, checklist, goals, fieldVisibility, showWeeklyPnl, customFields] = await Promise.all([
     DB.trades.all(), DB.accounts.all(), DB.setups.all(), DB.rules.all(), DB.checklist.all(), DB.goals.all(),
-    DB.meta.get('fieldVisibility'), DB.meta.get('showWeeklyPnl')
+    DB.meta.get('fieldVisibility'), DB.meta.get('showWeeklyPnl'), DB.meta.get('customFields')
   ]);
   trades.forEach(t=>{ if(t.exitPrice !== null && t.exitPrice !== undefined && t.exitPrice !== ''){ t.pnl = computeTradePnl(t); } });
   state.trades = trades; state.accounts = accounts; state.setups = setups; state.rules = rules;
   state.checklist = checklist; state.goals = goals;
   state.fieldVisibility = fieldVisibility ? { ...DEFAULT_FIELD_VISIBILITY, ...fieldVisibility } : { ...DEFAULT_FIELD_VISIBILITY };
   state.showWeeklyPnl = !!showWeeklyPnl;
+  state.customFields = Array.isArray(customFields) ? customFields : [];
 }
 
 function renderView(){
@@ -254,11 +268,11 @@ function renderDashboard(view){
       <button class="btn btn-primary" id="btn-new-trade">${ICONS.plus}New Trade</button>
     </div>
     <div class="stat-grid">
-      <div class="card stat"><div class="label">Net P&amp;L</div><div class="value ${s.netPnl>=0?'pos':'neg'} mono">${fmtMoneyShort(s.netPnl)}</div></div>
-      <div class="card stat"><div class="label">Win Rate</div><div class="value gold mono">${s.winRate.toFixed(1)}%</div></div>
-      <div class="card stat"><div class="label">Profit Factor</div><div class="value gold mono">${isFinite(s.profitFactor)?s.profitFactor.toFixed(2):'∞'}</div></div>
-      <div class="card stat"><div class="label">Expectancy</div><div class="value mono">${fmtMoneyShort(s.expectancy)}</div></div>
-      <div class="card stat"><div class="label">Trades Logged</div><div class="value mono">${s.closedCount}</div></div>
+      <div class="card stat"><div class="label">Net P&amp;L</div><div class="value mono" id="stat-netpnl" style="color:${pnlColor(s.netPnl)}">$0</div></div>
+      <div class="card stat"><div class="label">Win Rate</div><div class="value gold mono" id="stat-winrate">0%</div></div>
+      <div class="card stat"><div class="label">Profit Factor</div><div class="value gold mono" id="stat-pf">0.00</div></div>
+      <div class="card stat"><div class="label">Expectancy</div><div class="value mono" id="stat-expectancy">$0</div></div>
+      <div class="card stat"><div class="label">Trades Logged</div><div class="value mono" id="stat-count">0</div></div>
     </div>
     <div class="grid-2">
       <div class="card bracket">
@@ -283,6 +297,11 @@ function renderDashboard(view){
     </div>
   `;
   requestAnimationFrame(()=> drawEquityCurve($('#equity-canvas'), s.equity));
+  animateCountUp($('#stat-netpnl'), s.netPnl, fmtMoneyShort);
+  animateCountUp($('#stat-winrate'), s.winRate, v=> v.toFixed(1)+'%');
+  animateCountUp($('#stat-pf'), isFinite(s.profitFactor)?s.profitFactor:0, v=> isFinite(s.profitFactor)? v.toFixed(2) : '∞');
+  animateCountUp($('#stat-expectancy'), s.expectancy, fmtMoneyShort);
+  animateCountUp($('#stat-count'), s.closedCount, v=> Math.round(v).toString());
   const recent = trades.slice(0,5);
   $('#recent-trades').innerHTML = recent.length ? recent.map(tradeRowHtml).join('') :
     `<div class="empty-state" style="padding:30px 10px;">${ICONS.empty}<div>No trades yet</div></div>`;
@@ -363,11 +382,12 @@ function escapeHtml(str){
 }
 
 // ============== Trade History ==============
-let logFilter = { q:'', setup:'', dir:'' };
+let logFilter = { q:'', setup:'', dir:'', account:'' };
 function getFilteredLogTrades(){
   return filteredTrades().filter(t=>{
     if(logFilter.dir && t.direction !== logFilter.dir) return false;
     if(logFilter.setup && t.setup !== logFilter.setup) return false;
+    if(logFilter.account && !tradeAccountIds(t).includes(logFilter.account)) return false;
     if(logFilter.q){
       const q = logFilter.q.toLowerCase();
       if(!(t.symbol.toLowerCase().includes(q) || (t.notes||'').toLowerCase().includes(q))) return false;
@@ -390,13 +410,16 @@ function renderTradeHistory(view){
       <button class="btn btn-primary" id="btn-new-trade">${ICONS.plus}New Trade</button>
     </div>
     <div class="card" style="margin-bottom:16px;">
-      <div class="field-row3">
+      <div class="field-row" style="grid-template-columns:1.4fr 1fr 1fr 1fr;">
         <div class="field" style="margin-bottom:0;"><input id="f-q" placeholder="Search symbol or notes…" value="${escapeHtml(logFilter.q)}"></div>
         <div class="field" style="margin-bottom:0;">
           <select id="f-dir"><option value="">Any direction</option><option value="long" ${logFilter.dir==='long'?'selected':''}>Long</option><option value="short" ${logFilter.dir==='short'?'selected':''}>Short</option></select>
         </div>
         <div class="field" style="margin-bottom:0;">
           <select id="f-setup"><option value="">Any setup</option>${state.setups.map(s=>`<option value="${escapeHtml(s.name)}" ${logFilter.setup===s.name?'selected':''}>${escapeHtml(s.name)}</option>`).join('')}</select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <select id="f-account"><option value="">Any account</option>${state.accounts.map(a=>`<option value="${a.id}" ${logFilter.account===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}</select>
         </div>
       </div>
     </div>
@@ -407,6 +430,7 @@ function renderTradeHistory(view){
   $('#f-q').addEventListener('input', e=>{ logFilter.q = e.target.value; renderTradeHistoryList(); });
   $('#f-dir').addEventListener('change', e=>{ logFilter.dir = e.target.value; renderTradeHistoryList(); });
   $('#f-setup').addEventListener('change', e=>{ logFilter.setup = e.target.value; renderTradeHistoryList(); });
+  $('#f-account').addEventListener('change', e=>{ logFilter.account = e.target.value; renderTradeHistoryList(); });
 }
 
 // ============== Archive (folder browser: year → month → trades) ==============
@@ -744,6 +768,16 @@ function renderSettings(view){
       </div>
     </div>
 
+    <div class="card" style="margin-bottom:16px;">
+      <div class="section-title">Custom Fields</div>
+      <p style="color:var(--text1);font-size:13px;margin-top:0;">Add your own journal fields. Enabled ones appear on the New Trade form, right after Lessons.</p>
+      <div id="custom-fields-list"></div>
+      <div style="display:flex;gap:8px;">
+        <input id="custom-field-name" placeholder="e.g. Market Condition, Confidence Level">
+        <button class="btn btn-sm" id="custom-field-add">${ICONS.plus}Add</button>
+      </div>
+    </div>
+
     <div class="grid-2" style="margin-bottom:16px;">
       <div class="card">
         <div class="section-title">Setups</div>
@@ -790,6 +824,36 @@ function renderSettings(view){
     await DB.meta.put('fieldVisibility', updated);
     await refreshData();
   }));
+
+  function renderCustomFieldsList(){
+    const el = $('#custom-fields-list');
+    if(!el) return;
+    el.innerHTML = state.customFields.length ? state.customFields.map(f=> `
+      <div class="custom-field-row">
+        <input type="checkbox" data-cf-toggle="${f.id}" ${f.enabled?'checked':''}>
+        <span>${escapeHtml(f.label)}</span>
+        <button class="btn btn-sm btn-danger" data-cf-del="${f.id}">Remove</button>
+      </div>`).join('') : `<div style="color:var(--text1);font-size:13px;padding:4px 0 10px;">No custom fields yet.</div>`;
+    $$('[data-cf-toggle]', el).forEach(cb=> cb.addEventListener('change', async ()=>{
+      const updated = state.customFields.map(f=> f.id === cb.dataset.cfToggle ? { ...f, enabled: cb.checked } : f);
+      await DB.meta.put('customFields', updated);
+      await refreshData(); renderCustomFieldsList();
+    }));
+    $$('[data-cf-del]', el).forEach(b=> b.addEventListener('click', async ()=>{
+      const updated = state.customFields.filter(f=> f.id !== b.dataset.cfDel);
+      await DB.meta.put('customFields', updated);
+      await refreshData(); renderCustomFieldsList();
+    }));
+  }
+  renderCustomFieldsList();
+  $('#custom-field-add').addEventListener('click', async ()=>{
+    const label = $('#custom-field-name').value.trim();
+    if(!label) return;
+    const updated = [...state.customFields, { id: DB.uid(), label, enabled:true }];
+    await DB.meta.put('customFields', updated);
+    await refreshData(); renderCustomFieldsList();
+    $('#custom-field-name').value = '';
+  });
 
   $('#setups-list').innerHTML = state.setups.map(s=> `
     <div class="list-editor-row"><span>${escapeHtml(s.name)}</span><button class="btn btn-sm btn-danger" data-del-setup="${s.id}">×</button></div>
@@ -923,6 +987,7 @@ function openTradeDetailModal(id){
       ${detailSection('Notes', t.notes)}
       ${detailSection('Mistakes', t.mistakes)}
       ${detailSection('Lessons', t.lessons)}
+      ${t.customFieldValues ? Object.values(t.customFieldValues).map(cf=> detailSection(cf.label, cf.value)).join('') : ''}
       <div style="display:flex;justify-content:space-between;margin-top:6px;">
         <button class="btn btn-danger" id="d-delete">Delete</button>
         <div style="display:flex;gap:10px;">
@@ -997,6 +1062,9 @@ function openTradeModal(id){
       <div class="field"><label>Notes</label><textarea id="t-notes" placeholder="Setup reasoning, execution…">${editing?escapeHtml(editing.notes||''):''}</textarea></div>
       ${state.fieldVisibility.mistakes ? `<div class="field"><label>Mistakes</label><textarea id="t-mistakes" placeholder="What went wrong?">${editing?escapeHtml(editing.mistakes||''):''}</textarea></div>` : ''}
       ${state.fieldVisibility.lessons ? `<div class="field"><label>Lessons</label><textarea id="t-lessons" placeholder="What will you do differently?">${editing?escapeHtml(editing.lessons||''):''}</textarea></div>` : ''}
+      ${state.customFields.filter(f=> f.enabled).map(f=> `
+        <div class="field"><label>${escapeHtml(f.label)}</label><textarea data-custom-field="${f.id}" placeholder="${escapeHtml(f.label)}">${editing && editing.customFieldValues && editing.customFieldValues[f.id] ? escapeHtml(editing.customFieldValues[f.id].value||'') : ''}</textarea></div>
+      `).join('')}
       <div class="field"><label>Chart screenshots</label>
         <div class="img-drop" id="t-img-drop">Click to add screenshot(s) — you can select more than one</div>
         <input type="file" id="t-img-input" accept="image/*" multiple style="display:none;">
@@ -1135,7 +1203,15 @@ function openTradeModal(id){
       emotionsDuring: backdrop.querySelector('#t-emo-during') ? backdrop.querySelector('#t-emo-during').value.trim() : (editing?editing.emotionsDuring||'':''),
       notes: backdrop.querySelector('#t-notes').value.trim(),
       mistakes: backdrop.querySelector('#t-mistakes') ? backdrop.querySelector('#t-mistakes').value.trim() : (editing?editing.mistakes||'':''),
-      lessons: backdrop.querySelector('#t-lessons') ? backdrop.querySelector('#t-lessons').value.trim() : (editing?editing.lessons||'':'')
+      lessons: backdrop.querySelector('#t-lessons') ? backdrop.querySelector('#t-lessons').value.trim() : (editing?editing.lessons||'':''),
+      customFieldValues: (()=>{
+        const values = { ...(editing && editing.customFieldValues ? editing.customFieldValues : {}) };
+        $$('[data-custom-field]', backdrop).forEach(el=>{
+          const field = state.customFields.find(f=> f.id === el.dataset.customField);
+          values[el.dataset.customField] = { label: field ? field.label : '', value: el.value.trim() };
+        });
+        return values;
+      })()
     };
     await DB.trades.put(trade);
     const affectedAccounts = Array.from(new Set([...oldAccountIds, ...selectedAccountIds]));
